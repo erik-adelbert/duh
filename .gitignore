@@ -1,0 +1,38 @@
+# Jekyll
+docs/_site/
+docs/.jekyll-cache/
+docs/.sass-cache/
+docs/vendor/
+
+# Ruby / Bundler
+.bundle/
+
+# macOS
+.DS_Store
+
+# Go
+/vendor/
+*.test
+
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.a
+*.out
+
+# Coverage
+coverage.out
+coverage.html
+
+# Runtime logs
+cmd/vgmtui/logs/
+
+# IDEs / editors
+.idea/
+.vscode/
+*.swp
+*.swo

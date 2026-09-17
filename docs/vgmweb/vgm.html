@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css">
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+        }
+
+        #terminal {
+            width: 84ch;
+            height: 54em;
+        }
+    </style>
+
+    <script src="wasm_exec.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
+</head>
+
+<body>
+    <div id="terminal"></div>
+
+    <script>
+        const term = new Terminal({
+            cols: 84,
+            rows: 50,
+            cursorBlink: false,
+            convertEol: true,
+            scrollback: 0
+        });
+
+        term.open(document.getElementById("terminal"));
+
+        globalThis.renderScreen = function(screen) {
+            term.write(screen);
+        };
+
+        globalThis.renderError = function(error) {
+            console.error(error);
+            term.write(
+                "\r\n\x1b[31m" +
+                error +
+                "\x1b[0m\r\n"
+            );
+        };
+
+        const go = new Go();
+
+        WebAssembly.instantiateStreaming(
+            fetch("vgmweb.wasm"),
+            go.importObject
+        ).then(result => {
+            go.run(result.instance);
+        }).catch(err => {
+            term.write(
+                "\r\n\x1b[31mFailed to load WASM:\x1b[0m\r\n"
+            );
+
+            term.write(String(err));
+        });
+
+        window.addEventListener("message", event => {
+            if (!event.data || event.data.type !== "play") {
+                return;
+            }
+
+            const data = new Uint8Array(event.data.data);
+
+            term.clear();
+            term.write("\x1b[2J\x1b[H");
+
+            const result = globalThis.run(data);
+
+            if (result) {
+                renderError(result);
+            }
+        });
+    </script>
+</body>
+</html>

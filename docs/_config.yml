@@ -1,0 +1,52 @@
+# Site
+title: duh
+tagline: An audio toolkit for Go
+description: >-
+  Notes, releases, and build-in-the-open posts about duh —
+  a pure Go audio toolkit with no cgo and no surprises.
+author: Erik Adelbert (erika he/him)
+url: "https://erik-adelbert.github.io"
+baseurl: "/duh"
+lang: en
+
+# Theme
+theme: minimal-mistakes-jekyll
+minimal_mistakes_skin: "dark"
+
+# Plugins
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+  - jekyll-seo-tag
+  - jekyll-include-cache
+
+# Feeds
+feed:
+  posts_limit: 20
+  excerpt_only: false
+
+# Future posts
+future: true
+
+# Markdown
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
+# Permalinks
+permalink: /:year/:month/:day/:title/
+
+# Navigation
+header_pages:
+  - index.md
+  - about.md
+
+# Open image for social media previews
+og_image: "/assets/images/social-preview.png"
+
+# Exclude from build
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor/

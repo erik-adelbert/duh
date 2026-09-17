@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 18" width="100" height="56" role="img" aria-label="duh">
+    <defs>
+        <style>
+            .mono-text{
+                font-family: "SF Mono", "Monaco", "Courier New", monospace; font-size: 16px;
+                font-weight: 900;
+                fill: #00AE00;
+                text-anchor: middle;
+                letter-spacing: -0.5px;
+            }
+        </style>
+    </defs>
+    <text class="mono-text" x="16" y="9" dy="0.35em">duh</text>
+</svg>

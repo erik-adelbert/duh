@@ -1,0 +1,33 @@
+.TH A440 1
+.SH NAME
+a440 \- command-line tool
+.SH SYNOPSIS
+.B a440
+.SH DESCRIPTION
+Generate reference audio signals
+.SH SYNOPSIS
+.B bin/a440 [flags]
+.SH OPTIONS
+  -at duration
+    	Impulse position: 4m, 27s ... (max dt) (default 0s)
+  -dt duration
+    	Signal duration: 4m, 27s ... (max 30m) (default 30s)
+  -end value
+    	Sweep end frequency (default 880Hz)
+  -hz value
+    	Signal frequency: 1000mHz, 1Hz, 2kHz, ... (default 440Hz)
+  -mode string
+    	Sweep mode: linear, logarithmic (default "logarithmic")
+  -n int
+    	Frame count: 2, 100, 44100 ... (supersedes dt)
+  -o string
+    	Output WAV file path (default "a440.wav")
+  -of string
+    	PCM format (default "s16c2r44100")
+  -pcm
+    	output raw PCM on stdout
+  -s string
+    	Signal type: [square triangle impulse sawtooth sine pink white sweep silence] (default "sine")
+  -start value
+    	Sweep start frequency (default 440Hz)
+  -v	Enable verbose output

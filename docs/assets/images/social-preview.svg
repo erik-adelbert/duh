@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+    <rect width="1280" height="640" fill="#0d1117"/>
+
+    <!-- green wordmark, scaled up and centered -->
+    <text x="640" y="300"
+          font-family="SF Mono,Monaco,Courier New,monospace"
+          font-size="180" font-weight="900"
+          fill="#00AE00" text-anchor="middle"
+          letter-spacing="-4">duh</text>
+
+    <!-- tagline underneath -->
+    <text x="640" y="350"
+          font-family="SF Mono,Monaco,Courier New,monospace"
+          font-size="37" font-weight="400" dx="0.15em"
+          fill="#8b949e" text-anchor="middle">audio toolkit</text>
+</svg>

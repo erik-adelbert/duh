@@ -1,0 +1,167 @@
+<!-- <!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>duh vgmweb</title>
+
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css">
+
+    <style>
+        html, body {
+            margin: 0;
+            background: #000;
+        }
+
+        #controls {
+            margin: 10px;
+        }
+
+        #terminal {
+            margin: 10px;
+            width: 84ch;
+            height: 50em;
+        }
+    </style>
+
+    <script src="wasm_exec.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
+</head>
+
+<body>
+    <div id="controls">
+        <input id="file" type="file" accept=".vgm,.vgz">
+    </div>
+
+    <div id="terminal"></div>
+
+    <script>
+        const term = new Terminal({
+            cols: 84,
+            rows: 50,
+            cursorBlink: false,
+            convertEol: true,
+            scrollback: 0
+        });
+
+        term.open(document.getElementById("terminal"));
+
+        globalThis.renderScreen = function(screen) {
+            term.write(screen);
+        };
+
+        globalThis.renderError = function(error) {
+            console.error(error);
+            term.write("\r\n\x1b[31m" + error + "\x1b[0m\r\n");
+        };
+
+        const go = new Go();
+        let wasmReady = false;
+
+        WebAssembly.instantiateStreaming(
+            fetch("vgmweb.wasm"),
+            go.importObject
+        ).then(result => {
+            wasmReady = true;
+            go.run(result.instance);
+        }).catch(err => {
+            term.write("\r\n\x1b[31mFailed to load WASM:\x1b[0m\r\n");
+            term.write(String(err));
+        });
+
+        document.getElementById("file").addEventListener("change", async event => {
+
+            if (!wasmReady) {
+                return;
+            }
+
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            const buffer = await file.arrayBuffer();
+            const data = new Uint8Array(buffer);
+
+            term.clear();
+            term.write("\x1b[2J\x1b[H");
+
+            const result = globalThis.run(data);
+
+            if (result) {
+                renderError(result);
+            }
+        });
+    </script>
+</body>
+</html> -->
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>duh vgmweb</title>
+
+    <style>
+        html, body {
+            margin: 0;
+            background: #000;
+        }
+
+        #controls {
+            margin: 30px;
+        }
+
+        #terminal-frame {
+            display: block;
+            margin: 10px;
+            width: 84ch;
+            height: 54em;
+            border: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="controls">
+        <input id="file" type="file" accept=".vgm,.vgz">
+
+        <div style="margin-top: 6px; color: #ccc;">
+            Grab an OPL3 file from OPL Archive. Please don't hammer the site.
+        </div>
+    </div>
+
+    <iframe
+        id="terminal-frame"
+        src="vgm.html"
+        title="VGM player">
+    </iframe>
+
+    <script>
+        const frame = document.getElementById("terminal-frame");
+        const fileInput = document.getElementById("file");
+
+        fileInput.addEventListener("change", async event => {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            console.log("FILE:", file.name, file.size);
+
+            const buffer = await file.arrayBuffer();
+
+            frame.contentWindow.postMessage(
+                {
+                    type: "play",
+                    data: buffer
+                },
+                "*"
+            );
+        });
+    </script>
+</body>
+</html>
