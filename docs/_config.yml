@@ -10,7 +10,8 @@ baseurl: "/duh"
 lang: en
 
 # Theme
-theme: minimal-mistakes-jekyll
+remote_theme: "mmistakes/minimal-mistakes"
+# theme: minimal-mistakes-jekyll
 minimal_mistakes_skin: "dark"
 
 # Plugins
