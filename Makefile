@@ -20,11 +20,15 @@ else
 	TARGETS := $(BINARIES)
 endif
 
-.PHONY: all build test test-race lint fmt fmt-check vet check clean install tools list pkg-docs man serve-blog
+.PHONY: all build test test-race lint fmt fmt-check vet check clean install tools list pkg-docs man serve-blog utm
 
 all: check
 
-build:
+utm:
+	@mkdir -p $(BIN_DIR)
+	go build -o $(BIN_DIR)/utm ./cmd/utm
+
+build: utm
 	@mkdir -p $(BIN_DIR)
 	@mkdir -p $(MAN_DIR)
 	@for b in $(TARGETS); do \

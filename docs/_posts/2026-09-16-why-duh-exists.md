@@ -18,7 +18,7 @@ target **small platforms via `TinyGo` and browsers via [`WASM`]({{ "/vgmweb/" | 
 that supports editing and professional studio capabilities it could prove highly useful for games right out of
 the box. Ultimately, though, my goal is to make duh a tool for live performance.
 
-> The JS/WASM demo plays best with Chrome
+> The [JS/WASM demo]({{ "/vgmweb/" | relative_url }}) plays best with Chrome
 
 ## Why the long route of Go?
 
@@ -28,14 +28,9 @@ The [Go Team](https://go.dev/blog/io2013-chat), and [Commander Pike](https://en.
 
 But at the end of the day, I like the aesthetics of the language, and it is a great match for my [minimalist core style](https://github.com/erik-adelbert/aoc/blob/main/2025/1/aoc1.go).
 
-## The constraint
-
-`CGO_ENABLED=0` is the whole pitch. If a feature can't be done in pure Go, it doesn't ship. That single
-rule rules out a lot — and it's exactly why the result is portable to any `GOOS` Go targets.
-
 ## What's here
 
-Not much yet. The repo is public, the README describes the goals, and the API is still moving. The first
+The repo is public, the README describes the goals, and the API is still moving. The first
 tag lands when the core features I envision are done.
 
 If you want to follow along, [watch the repo](https://github.com/erik-adelbert/duh).
