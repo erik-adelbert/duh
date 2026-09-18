@@ -11,24 +11,26 @@ import (
 )
 
 type Tap struct {
-	Format
 	*Ring
 
 	sync.WaitGroup
 
 	win int
+	hop int
 
 	updateFn func(p []byte)
-	tick     time.Duration // Update tick
 
 	stop chan struct{}
+
+	startOnce, stopOnce sync.Once
 }
 
-const DefaultTapCallBackRate = 30 * FPS
-
-func NewTap(format Format, bufferDuration time.Duration, windowSize int, tick time.Duration) (*Tap, error) {
-	if tick <= 0 {
-		tick = time.Second / DefaultTapCallBackRate
+func NewTap(format Format, bufferDuration time.Duration, windowSize int, hop int) (*Tap, error) {
+	if windowSize <= 0 {
+		return nil, mkError(ErrTap, "invalid window size")
+	}
+	if hop <= 0 || hop > windowSize {
+		return nil, mkError(ErrTap, "invalid hop size")
 	}
 
 	ring, err := NewRing(format, bufferDuration)
@@ -37,12 +39,10 @@ func NewTap(format Format, bufferDuration time.Duration, windowSize int, tick ti
 	}
 
 	return &Tap{
-		Format: format,
-		Ring:   ring,
+		Ring: ring,
 
 		win: windowSize,
-
-		tick: tick,
+		hop: hop,
 
 		stop: make(chan struct{}),
 	}, nil
@@ -51,10 +51,11 @@ func NewTap(format Format, bufferDuration time.Duration, windowSize int, tick ti
 func (tap *Tap) Write(p []byte) (n int, err error) {
 	select {
 	case <-tap.stop:
-		return
+		return len(p), nil
 	default:
-		n, err = tap.Ring.Write(p)
 	}
+
+	n, err = tap.Ring.Write(p)
 
 	return
 }
@@ -64,28 +65,42 @@ func (tap *Tap) WindowSize() int {
 }
 
 func (tap *Tap) Start() {
-	tap.Go(func() {
-		fs := int(tap.FrameSize())
-		chunk := make([]byte, tap.win*fs)
+	tap.startOnce.Do(func() {
+		tap.Go(func() {
+			fs := int(tap.FrameSize())
+			chunk := make([]byte, tap.win*fs)
 
-		clock := time.NewTicker(tap.tick)
-		defer clock.Stop()
+			// The display advances by hop frames per update.
+			hop := time.Duration(
+				float64(tap.hop) /
+					float64(tap.SampleRate()) *
+					float64(time.Second),
+			)
 
-		for {
-			select {
-			case <-tap.stop:
-				return
-			case <-clock.C:
-				nread := tap.ReadFrames(chunk)
+			updater := time.NewTicker(hop)
+			defer updater.Stop()
 
-				if nread > 0 && tap.updateFn != nil {
-					tap.updateFn(chunk[:nread])
+			for {
+				select {
+				case <-tap.stop:
+					return
+
+				case <-updater.C:
+					if tap.ReadWindow(chunk, tap.hop) {
+						if tap.updateFn != nil {
+							tap.updateFn(chunk)
+						}
+					}
 				}
 			}
-		}
+		})
 	})
 }
 
+// UpdateFunc registers the callback invoked by Start with the latest decoded
+// window. It must be called before Start.
+// The samples slice is only valid for the duration of the callback and
+// must not be retained or modified after the callback returns.
 func (tap *Tap) UpdateFunc(update func([]float64, int)) {
 	nchan := tap.ChannelCount()
 	nframe := tap.WindowSize()
@@ -102,7 +117,9 @@ func (tap *Tap) UpdateFunc(update func([]float64, int)) {
 
 // Stop everything
 func (tap *Tap) Stop() {
-	close(tap.stop)
+	tap.stopOnce.Do(func() {
+		close(tap.stop)
+	})
 	tap.Wait()
 }
 
@@ -130,34 +147,33 @@ func OpenTap(r io.Reader, tap *Tap) *TapReader {
 }
 
 func (r *TapReader) Read(p []byte) (n int, err error) {
+	if r.r == nil {
+		return 0, nil
+	}
+
 	n, err = r.r.Read(p)
 
-	if err != nil {
-		return
-	}
-
 	if n > 0 && r.Tap != nil {
-		select {
-		case <-r.stop:
-			return
-		default:
-			n, err = r.Write(p[:n])
-
-			if err != nil {
-				return
-			}
-		}
+		_, _ = r.Tap.Write(p[:n])
 	}
 
-	return
+	return n, err
 }
 
 func (r *TapReader) Seek(offset int64, whence int) (int64, error) {
-	if r.rs != nil {
-		return r.rs.Seek(offset, whence)
+	if r.rs == nil {
+		return 0, ErrESPIPE
 	}
 
-	return 0, ErrESPIPE
-}
+	pos, err := r.rs.Seek(offset, whence)
+	if err != nil {
+		err = mkError(ErrTap, err)
+		return 0, err
+	}
 
-const FPS = 1
+	if r.Tap != nil {
+		r.Tap.Reset()
+	}
+
+	return pos, nil
+}

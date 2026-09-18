@@ -38,6 +38,8 @@ var (
 
 	ErrRing = errp.Export("ring buffer error")
 
+	ErrTap = errp.Export("tap error")
+
 	ErrRatio = errp.Export("invalid ratio")
 
 	ErrFlush = errp.Export("failed to flush")

@@ -108,12 +108,13 @@ func play(in io.Reader, a args) (err error) {
 		}
 
 		const (
-			WindowSize     = 1024
+			WindowSize     = 2048
+			Hop            = 1470
 			BufferDuration = 500 * ms
 		)
 
 		// Set up a PCM tap to analyze the audio data for the spectrogram and vubars
-		tap, _ := pcm.NewTap(a.ifmt, BufferDuration, WindowSize, 0)
+		tap, _ := pcm.NewTap(a.ifmt, BufferDuration, WindowSize, Hop)
 		defer tap.Stop()
 
 		// Set up the tap's update function to feed the analyzers

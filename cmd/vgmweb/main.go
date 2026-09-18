@@ -98,12 +98,13 @@ func play(out Printer, in *vgm.Decoder) (err error) {
 	vbR = tui.NewVuBar()
 
 	const (
-		WindowSize     = 1024
+		WindowSize     = 2048
+		HopSize        = 1470
 		BufferDuration = 500 * ms
 	)
 
 	// Set up a PCM tap to analyze the audio data for the spectrogram and vubars
-	tap, _ := pcm.NewTap(in.Format(), BufferDuration, WindowSize, 0)
+	tap, _ := pcm.NewTap(in.Format(), BufferDuration, WindowSize, HopSize)
 	defer tap.Stop()
 
 	// Set up the tap's update function to feed the analyzers

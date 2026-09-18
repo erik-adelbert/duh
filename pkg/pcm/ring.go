@@ -9,10 +9,12 @@ import (
 	"time"
 )
 
+// Ring is a circular buffer for PCM audio frames. It supports writing arbitrary PCM bytes,
+// accumulating them into complete frames, and reading windows of frames without consuming them.
 type Ring struct {
 	mu sync.Mutex
 
-	format Format
+	Format
 
 	// Always contains complete PCM frames.
 	buf []byte
@@ -30,31 +32,42 @@ type Ring struct {
 }
 
 func NewRing(format Format, dt time.Duration) (r *Ring, err error) {
+	fs := format.FrameSize()
 	bufsz := format.BufferSize(dt)
 
-	if bufsz <= 0 {
+	if bufsz < fs {
 		err = mkError(ErrRing, "invalid buffer size")
 		return
 	}
 
 	r = &Ring{
-		format: format,
+		Format: format,
 		buf:    make([]byte, bufsz),
+
+		pending: make([]byte, 0, format.FrameSize()),
 	}
 
 	return
 }
 
-// Write adds arbitrary bytes from the audio backend.
+// Write accepts arbitrary PCM bytes. Bytes are accumulated until complete
+// frames can be written to the ring. It never blocks.
 //
-// It never blocks waiting for the consumer.
-// If the ring is full, the oldest complete PCM frames are dropped.
+// Write always consumes the entire input slice and therefore returns
+// len(p), nil, unless an error is added in the future.
+//
+// If the ring is full, the oldest complete frames are discarded.
 func (r *Ring) Write(p []byte) (n int, err error) {
 	if len(p) == 0 {
 		return
 	}
 
-	fs := int(r.format.FrameSize())
+	n = len(p)
+
+	fs := int(r.FrameSize())
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	// Complete any partial frame left from the previous Write.
 	if len(r.pending) > 0 {
@@ -64,23 +77,17 @@ func (r *Ring) Write(p []byte) (n int, err error) {
 		p = p[need:]
 
 		if len(r.pending) == fs {
-
-			r.mu.Lock()
 			r.writeFrame(r.pending)
-			r.mu.Unlock()
-
 			r.pending = r.pending[:0]
 		}
 	}
 
 	// Write complete nframe directly from p.
-	r.mu.Lock()
 	nframe := len(p) / fs
 	for i := range nframe {
 		start := i * fs
 		r.writeFrame(p[start : start+fs])
 	}
-	r.mu.Unlock()
 
 	// Save the incomplete trailing frame.
 	p = p[nframe*fs:]
@@ -88,75 +95,74 @@ func (r *Ring) Write(p []byte) (n int, err error) {
 		r.pending = p
 	}
 
-	return nframe * fs, nil
+	return
 }
 
-// writeFrame must be called with r.mu held.
 func (r *Ring) writeFrame(frame []byte) {
-	fs := int(r.format.FrameSize())
+	fs := int(r.FrameSize())
 
-	// Full: discard the oldest frame.
 	if r.n == len(r.buf) {
 		r.r += fs
-		r.r %= len(r.buf)
-
+		if r.r == len(r.buf) {
+			r.r = 0
+		}
 		r.n -= fs
 	}
 
 	copy(r.buf[r.w:r.w+fs], frame)
 
 	r.w += fs
-	r.w %= len(r.buf)
+	if r.w == len(r.buf) {
+		r.w = 0
+	}
 
 	r.n += fs
 }
 
-// ReadFrames reads up complete PCM frames.
-//
-// It never returns a partial frame.
-// It returns the number of bytes read.
-func (r *Ring) ReadFrames(out []byte) int {
-	if len(out) == 0 {
-		return 0
+func (r *Ring) ReadWindow(out []byte, hop int) bool {
+	if len(out) == 0 || hop <= 0 {
+		return false
 	}
-
-	fs := int(r.format.FrameSize())
-	nframe := len(out) / fs
-
-	nframe = min(nframe, r.n/fs)
-	nread := nframe * fs
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// First contiguous portion.
+	fs := int(r.FrameSize())
+	nframe := len(out) / fs
+
+	// Only process complete windows.
+	if r.n < nframe*fs {
+		return false
+	}
+
+	nread := nframe * fs
+
+	// Copy window without consuming it.
 	first := min(nread, len(r.buf)-r.r)
 	copy(out[:first], r.buf[r.r:r.r+first])
 
-	// Wrapped portion.
 	if first < nread {
 		copy(out[first:nread], r.buf[:nread-first])
 	}
 
-	r.r += nread
-	r.r %= len(r.buf)
+	hop = min(hop, r.n/fs)
+	ndiscard := hop * fs
 
-	r.n -= nread
+	r.r += ndiscard
+	if r.r >= len(r.buf) {
+		r.r -= len(r.buf)
+	}
+	r.n -= ndiscard
 
-	return nread
+	return true
 }
 
-func (r *Ring) AvailableFrames() int {
+func (r *Ring) Reset() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	return r.n / int(r.format.FrameSize())
-}
-
-func (r *Ring) CapacityFrames() int {
-	return len(r.buf) / int(r.format.FrameSize())
-}
-
-func (r *Ring) Format() Format {
-	return r.format
+	r.r = 0
+	r.w = 0
+	r.n = 0
+	r.pending = r.pending[:0]
 }

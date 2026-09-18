@@ -50,11 +50,14 @@ func main() {
 		die(err, "", 1)
 	}
 
-	// Create a new PCM-aware tap with a frame buffer of 1088 frames
+	// Create a new PCM-aware tap with a frame buffer of 1024 frames
 	// presenting them at 30FPS (default rate)
-	const FrameWindowSize = 1024
+	const (
+		WindowSize = 2048
+		Hop        = 1470
+	)
 
-	tap, err := pcm.NewTap(ifmt, 500*time.Millisecond, FrameWindowSize, 0)
+	tap, err := pcm.NewTap(ifmt, 500*time.Millisecond, WindowSize, Hop)
 	die(err, "Failed to create PCM tap", 1)
 
 	in = pcm.OpenTap(in, tap)
