@@ -5,7 +5,7 @@ date: 2026-09-16
 categories: [meta]
 ---
 
-During the early 00s, I was studying at [Paris8 AI Lab](https://www.researchgate.net/publication/48445152_A_Parallel_General_Game_Player), with a focus on programming languages, while also being involved in the European electronic art scene with my group, [Les Virtualistes](https://youtu.be/sFNZyTzKAT8). I reckon it was a very creative time, and it was not uncommon for coders to explore fields outside their main discipline. At the time, computing resources were scarce, and every bit counted (yes, think WASM at scale).
+During the early 00s, I was studying at [Paris8 AI Lab](https://www.researchgate.net/publication/48445152_A_Parallel_General_Game_Player), with a focus on programming languages, while also being involved in the European electronic art scene with my group, [Les Virtualistes](https://youtu.be/sFNZyTzKAT8). I reckon it was a very creative time, and it was not uncommon for coders to explore fields outside their main discipline. At the time, computing resources were scarce, and every bit counted.
 
 Today, I am craving to put a team together and produce a demo or installation once again. I have decided
 to build the audio toolkit first. It revives a handful of legacy file formats while bringing current ones

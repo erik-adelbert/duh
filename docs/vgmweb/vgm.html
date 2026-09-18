@@ -40,7 +40,7 @@
         term.open(document.getElementById("terminal"));
 
         try {
-            term.loadAddon(new WebglAddon());
+            term.loadAddon(new WebglAddon.WebglAddon());
             console.log("WebGL acceleration activated successfully.");
         } catch (e) {
             console.warn("WebGL addon failed to load, falling back to canvas/DOM engine:", e);
