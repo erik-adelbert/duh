@@ -10,6 +10,6 @@ release notes, design decisions, and the occasional rant will land.
 
 ## Links
 
-- [Source on GitHub](https://github.com/<user>/duh)
+- [Source on GitHub](https://github.com/erik-adelbert/duh)
 - [README](https://github.com/erik-adelbert/duh#readme)
 - [Issues](https://github.com/erik-adelbert/duh/issues)
