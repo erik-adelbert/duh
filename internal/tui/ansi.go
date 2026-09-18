@@ -6,6 +6,7 @@ package tui
 
 import (
 	"os"
+	"runtime"
 
 	"github.com/charmbracelet/x/term"
 )
@@ -122,6 +123,10 @@ var (
 
 // NoColor checks if the terminal should disable color output.
 func NoColor() bool {
+	if runtime.GOOS == "js" && runtime.GOARCH == "wasm" {
+		return false
+	}
+
 	return os.Getenv("NO_COLOR") != "" ||
 		os.Getenv("TERM") == "dumb" ||
 		!term.IsTerminal(os.Stdout.Fd())
