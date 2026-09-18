@@ -12,10 +12,18 @@ import (
 
 type Audio interface {
 	BitDepth() int
+	BufferSize(time.Duration) int64
 	ChannelCount() int
 	Close()
-	Duration() (time.Duration, error)
+	Err() error
 	Format() pcm.Format
+}
+
+type Player interface {
+	BitDepth() int
+	ChannelCount() int
+
+	Duration() time.Duration
 	IsPlaying() bool
 	Pause()
 	Play()

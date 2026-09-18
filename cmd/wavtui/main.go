@@ -63,17 +63,16 @@ func main() {
 	in = pcm.OpenTap(in, tap)
 
 	// Create the backend for audio playback using the taped reader
-	ob, err := backend.NewOtoBackend(in, ifmt, false)
+	ob, err := backend.NewOtoBackend(ifmt, false)
 	die(err, "Failed to create oto backend", 1)
 
-	defer ob.Close()
-
-	if ob.Format() != ifmt {
-		verbosef("Input converted from", ifmt, "to", ob.Format())
+	p := ob.NewPlayer(in)
+	if p == nil {
+		die(errors.New("failed to create audio player"), "", 1)
 	}
 
 	// Create the playback controller
-	ctrl := player.NewController(ob)
+	ctrl := player.NewController(p)
 
 	name := filepath.Base(a.wavPath)
 

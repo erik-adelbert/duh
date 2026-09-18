@@ -13,10 +13,10 @@ import (
 )
 
 type Controller struct {
-	a backend.Audio
+	a backend.Player
 }
 
-func NewController(a backend.Audio) *Controller {
+func NewController(a backend.Player) *Controller {
 	return &Controller{a: a}
 }
 
@@ -71,7 +71,7 @@ func (c *Controller) position() (Position, Position) {
 
 	pos := int64(time.Second) * off / int64(spr*nch*bps)
 
-	dur, _ := c.a.Duration()
+	dur := c.a.Duration()
 
 	return Position(pos), Position(dur)
 }

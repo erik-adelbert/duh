@@ -35,12 +35,20 @@ type Input interface {
 
 type Printer func(string)
 
-func run(in *vgm.Decoder, out Printer) error {
+func run(out Printer, oto *backend.OtoBackend, in *vgm.Decoder) error {
 	in.SetLoopCount(-1)
-	return play(out, in)
+	return play(out, oto, in)
 }
 
 func main() {
+	vfmt, _ := pcm.ParseFormat(pcm.OPL3)
+	oto, err := backend.NewOtoBackend(vfmt, true)
+
+	if err != nil {
+		js.Global().Call("renderError", err.Error())
+		return
+	}
+
 	js.Global().Set("run", js.FuncOf(func(this js.Value, args []js.Value) any {
 		data := args[0]
 
@@ -55,9 +63,12 @@ func main() {
 		go func() {
 			defer in.Close() //nolint:errcheck
 
-			err := run(in, func(screen string) {
-				js.Global().Call("renderScreen", screen)
-			})
+			err := run(
+				func(screen string) {
+					js.Global().Call("renderScreen", screen)
+				},
+				oto, in,
+			)
 
 			if err != nil {
 				js.Global().Call("renderError", err.Error())
@@ -77,7 +88,7 @@ const (
 	MaxHz     = 20_000 * Hz
 )
 
-func play(out Printer, in *vgm.Decoder) (err error) {
+func play(out Printer, oto *backend.OtoBackend, in *vgm.Decoder) (err error) {
 	var (
 		sp  tui.Spectro
 		vbL tui.VuBar
@@ -100,7 +111,7 @@ func play(out Printer, in *vgm.Decoder) (err error) {
 	const (
 		WindowSize     = 2048
 		HopSize        = 1470
-		BufferDuration = 500 * ms
+		BufferDuration = 700 * ms
 	)
 
 	// Set up a PCM tap to analyze the audio data for the spectrogram and vubars
@@ -133,12 +144,11 @@ func play(out Printer, in *vgm.Decoder) (err error) {
 
 	OPL3Regs := tui.NewOPL3State()
 
-	player, err := backend.NewOtoBackend(src, in.Format(), true)
+	// oto, err := backend.NewOtoBackend(src, in.Format(), true)
+	player := oto.NewPlayer(src)
 	if err != nil {
 		return err
 	}
-
-	defer player.Close()
 
 	// Start playback
 	player.Play()
@@ -225,8 +235,7 @@ func play(out Printer, in *vgm.Decoder) (err error) {
 		}
 	}
 
-	player.Pause()
-	player.Close()
+	player.PauseAndStopReading()
 
 	return nil
 }

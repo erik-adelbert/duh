@@ -72,7 +72,10 @@ func main() {
 		verbosef("Passthrough mode enabled\n")
 	}
 
-	err := play(in, a)
+	oto, err := backend.NewOtoBackend(a.ifmt, false)
+	die(err, "Failed to initialize audio backend", ExitError)
+
+	err = play(oto, in, a)
 	die(err, "Failed to play PCM data", ExitError)
 }
 
@@ -83,7 +86,7 @@ const (
 	MaxHz     = 20_000 * Hz
 )
 
-func play(in io.Reader, a args) (err error) {
+func play(oto *backend.OtoBackend, in io.Reader, a args) (err error) {
 	var (
 		sp  tui.Spectro
 		vbL tui.VuBar
@@ -147,10 +150,10 @@ func play(in io.Reader, a args) (err error) {
 	}
 
 	// Set up the audio playback
-	player, err := backend.NewOtoBackend(in, a.ifmt, false)
-	die(err, "", ExitError)
-
-	defer player.Close()
+	player := oto.NewPlayer(in)
+	if player == nil {
+		return fmt.Errorf("failed to create audio player")
+	}
 
 	// Set up signal handling for graceful termination
 	ctrlc, stop := sighandle(os.Interrupt, syscall.SIGTERM)
@@ -241,6 +244,8 @@ func play(in io.Reader, a args) (err error) {
 			}
 		}
 	}
+
+	player.PauseAndStopReading()
 
 	return nil
 }

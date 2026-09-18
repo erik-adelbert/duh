@@ -93,7 +93,10 @@ func main() {
 
 	verbosef("Playing %v with %d loops...\n", in, a.nloop)
 
-	err = play(in, a)
+	oto, err := backend.NewOtoBackend(in.Format(), false)
+	die(err, "", ExitError)
+
+	err = play(oto, in, a)
 	die(err, "", ExitError)
 }
 
@@ -103,7 +106,7 @@ const (
 	MaxHz     = 20_000 * Hz
 )
 
-func play(in *vgm.Decoder, a args) (err error) {
+func play(oto *backend.OtoBackend, in *vgm.Decoder, a args) (err error) {
 	defer closeTTY()
 
 	var (
@@ -177,8 +180,10 @@ func play(in *vgm.Decoder, a args) (err error) {
 		OPL3Regs = tui.NewOPL3State()
 	}
 
-	player, err := backend.NewOtoBackend(src, in.Format(), false)
-	die(err, "", ExitError)
+	player := oto.NewPlayer(src)
+	if player == nil {
+		return fmt.Errorf("failed to create audio player")
+	}
 
 	defer player.Close()
 
@@ -233,8 +238,7 @@ func play(in *vgm.Decoder, a args) (err error) {
 	for player.IsPlaying() {
 		select {
 		case <-ctrlc: // Exit on Ctrl+C
-			player.Pause()
-			player.Close()
+			player.PauseAndStopReading()
 
 			return nil // Exit gracefully on Ctrl+C
 		case <-vsyncer.C: // Draw a frame

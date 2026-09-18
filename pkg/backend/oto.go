@@ -14,68 +14,32 @@ import (
 )
 
 type OtoBackend struct {
-	ctx *oto.Context
-	o   *oto.NewContextOptions
+	*oto.Context
 
-	r        *otoReader
-	p        *oto.Player
-	duration time.Duration
-
-	posLast time.Time
+	pcm.Format
 
 	ofmt pcm.Format
-
-	flush func() int
+	opts *oto.NewContextOptions
 }
 
-func isOtoFormat(format pcm.Format) bool {
-	var otofmts = []string{
-		"u8", "s16", "f32",
-	}
-
-	fstr := format.String()
-
-	nchan := format.ChannelCount()
-	sr := format.SampleRate()
-
-	for f := range otofmts {
-		if strings.HasPrefix(fstr, otofmts[f]) {
-			if nchan <= 2 && (sr == 44_100 || sr == 48_000) {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-func NewOtoBackend(r io.Reader, format pcm.Format, wasm bool) (*OtoBackend, error) {
+func NewOtoBackend(format pcm.Format, wasm bool) (*OtoBackend, error) {
+	ifmt := format
 	ofmt := format
 
-	if ofmt.Tag() == pcm.UnsignedIntBE && ofmt.BitDepth() == 8 {
-		ofmt, _ = pcm.NewFormat(
+	switch {
+	case ifmt.Tag() == pcm.UnsignedIntBE && ifmt.BitDepth() == 8:
+		ifmt, _ = pcm.NewFormat(
 			pcm.UnsignedIntLE, // 8-bit big-endian is little-endian too
-			ofmt.BitDepth(), ofmt.ChannelCount(), ofmt.SampleRate(),
+			ifmt.BitDepth(), ifmt.ChannelCount(), ifmt.SampleRate(),
 		)
-	}
 
-	var flush = func() int { return 0 }
+		ofmt = ifmt
+	case !isOtoFormat(ifmt):
+		nchan := clamp(ifmt.ChannelCount(), 1, 2)
 
-	if !isOtoFormat(ofmt) {
-		ofmt32, err := pcm.NewFormat(pcm.Float, 32, 2, 44_100)
-		if err != nil {
-			return nil, err
-		}
-
-		cr, err := pcm.NewConverter(ofmt32, ofmt)
-		if err != nil {
-			return nil, err
-		}
-
-		flush = func() int { return cr.Flush(nil) }
-
-		r = pcm.OpenConv(r, cr)
-		ofmt = ofmt32
+		ofmt, _ = pcm.NewFormat(
+			pcm.Float, 32, nchan, ifmt.SampleRate(),
+		)
 	}
 
 	var otofmt oto.Format
@@ -109,174 +73,122 @@ func NewOtoBackend(r io.Reader, format pcm.Format, wasm bool) (*OtoBackend, erro
 		<-ready
 	}
 
-	or := &otoReader{
-		r:      r,
-		format: opts.Format,
-		count:  0,
-	}
-
 	return &OtoBackend{
-		ctx: ctx,
-		o:   &opts,
-		r:   or,
-		p:   ctx.NewPlayer(or),
+		Context: ctx,
+		Format:  ifmt,
 
-		ofmt:  ofmt,
-		flush: flush,
+		opts: &opts,
+		ofmt: ofmt,
 	}, nil
 }
 
-func (b *OtoBackend) Close() {
-	if b.flush != nil {
-		_ = b.flush()
+type OtoPlayer struct {
+	*oto.Player
+	pcm.Format
+
+	r  io.Reader
+	rs io.ReadSeeker
+}
+
+func (b *OtoBackend) NewPlayer(r io.Reader) *OtoPlayer {
+	if r == nil {
+		return nil
+	}
+
+	rs, _ := r.(io.ReadSeeker)
+
+	if b.Format != b.ofmt {
+		cv, err := pcm.NewConverter(b.Format, b.ofmt)
+
+		if err != nil {
+			return nil
+		}
+
+		rcv := pcm.OpenConv(r, cv)
+
+		r = rcv
+
+		if rs != nil {
+			rs = rcv
+		}
+	}
+
+	return &OtoPlayer{
+		Player: b.Context.NewPlayer(r),
+		Format: b.Format,
+
+		r:  r,
+		rs: rs,
 	}
 }
 
-func (b *OtoBackend) Format() pcm.Format {
-	return b.ofmt
+func (b *OtoBackend) Close() {}
+
+func (p *OtoPlayer) Seek(offset int64, whence int) (int64, error) {
+	if p.rs == nil {
+		return 0, ErrESPIPE
+	}
+
+	return p.rs.Seek(offset, whence)
 }
 
-func (b *OtoBackend) BitDepth() int {
-	switch b.o.Format {
-	case oto.FormatUnsignedInt8:
-		return 8
-	case oto.FormatSignedInt16LE:
-		return 16
-	case oto.FormatFloat32LE:
-		return 32
-	default:
+func (p *OtoPlayer) Duration() (dt time.Duration) {
+	if p.rs == nil {
+		return
+	}
+
+	off0, err := p.rs.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return
+	}
+
+	end, err := p.rs.Seek(0, io.SeekEnd)
+	if err != nil {
+		return
+	}
+
+	_, err = p.rs.Seek(off0, io.SeekStart)
+	if err != nil {
+		return
+	}
+
+	return p.Format.Duration(end)
+}
+
+func (p *OtoPlayer) Position() int64 {
+	if p.rs == nil {
 		return 0
 	}
-}
 
-func (b *OtoBackend) ChannelCount() int {
-	return b.o.ChannelCount
-}
-
-func (b *OtoBackend) Duration() (time.Duration, error) {
-	rs, ok := b.r.r.(io.Seeker)
-
-	if !ok {
-		return 0, ErrESPIPE
-	}
-
-	if b.p == nil {
-		return 0, nil
-	}
-
-	if b.duration != 0 {
-		return b.duration, nil
-	}
-
-	// Save current position
-	cur, _ := rs.Seek(0, io.SeekCurrent)
-	end, err := rs.Seek(0, io.SeekEnd)
-
+	off, err := p.rs.Seek(0, io.SeekCurrent)
 	if err != nil {
-		return 0, err
+		return 0
 	}
 
-	// Restore position
-	_, _ = rs.Seek(cur, io.SeekStart)
+	return off
+}
 
-	var fsz int64
-
-	switch b.o.Format {
-	case oto.FormatUnsignedInt8:
-		fsz = int64(b.o.ChannelCount * 1)
-	case oto.FormatSignedInt16LE:
-		fsz = int64(b.o.ChannelCount * 2)
-	case oto.FormatFloat32LE:
-		fsz = int64(b.o.ChannelCount * 4)
-	default:
-		return 0, ErrBadFormat
+func isOtoFormat(format pcm.Format) bool {
+	var otofmts = []string{
+		"u8", "s16", "f32",
 	}
 
-	nsample := end / fsz
-	b.duration = time.Duration(int64(time.Second) * nsample / int64(b.o.SampleRate))
+	fstr := format.String()
 
-	return b.duration, nil
-}
+	nchan := format.ChannelCount()
+	sr := format.SampleRate()
 
-func (b *OtoBackend) IsPlaying() bool {
-	return b.p != nil && b.p.IsPlaying()
-}
-
-func (b *OtoBackend) Pause() {
-	if b.p != nil {
-		b.p.Pause()
-	}
-}
-
-func (b *OtoBackend) Play() {
-	if b.p != nil {
-		b.posLast = time.Now()
-
-		b.p.Play()
-	}
-}
-
-func (b *OtoBackend) Position() int64 {
-	now := time.Now()
-	dt := now.Sub(b.posLast)
-
-	b.posLast = now
-	bytesPerSecond := int64(b.o.SampleRate * b.o.ChannelCount * (b.BitDepth() / 8))
-	advance := bytesPerSecond * dt.Nanoseconds() / int64(time.Second)
-
-	return max(b.r.Count()-advance, 0)
-}
-
-func (b *OtoBackend) SampleRate() int {
-	return b.o.SampleRate
-}
-
-func (b *OtoBackend) Seek(offset int64, whence int) (int64, error) {
-	if b.r == nil {
-		return 0, ErrInvalidSeek
+	for f := range otofmts {
+		if strings.HasPrefix(fstr, otofmts[f]) {
+			if nchan <= 2 && (sr == 44_100 || sr == 48_000) {
+				return true
+			}
+		}
 	}
 
-	return b.p.Seek(offset, whence)
+	return false
 }
 
-func (b *OtoBackend) SetVolume(volume float64) {
-	if b.p != nil {
-		b.p.SetVolume(volume)
-	}
-}
-
-type otoReader struct {
-	r      io.Reader
-	format oto.Format
-	count  int64
-}
-
-func (or *otoReader) Count() int64 {
-	return or.count
-}
-
-func (or *otoReader) Read(p []byte) (int, error) {
-	n, err := or.r.Read(p)
-
-	or.count += int64(n)
-
-	return n, err
-}
-
-func (or *otoReader) Seek(offset int64, whence int) (int64, error) {
-	rs, ok := or.r.(io.Seeker)
-
-	if !ok {
-		return 0, ErrESPIPE
-	}
-
-	pos, err := rs.Seek(offset, whence)
-
-	if err != nil {
-		return 0, err
-	}
-
-	or.count = pos
-
-	return pos, nil
+func clamp(x, a, b int) int {
+	return max(a, min(b, x))
 }
