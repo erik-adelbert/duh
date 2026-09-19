@@ -18,7 +18,7 @@ target **small platforms via `TinyGo` and browsers via [`WASM`]({{ "/vgmweb/" | 
 that supports editing and professional studio capabilities it could prove highly useful for games right out of
 the box. Ultimately, though, my goal is to make duh a tool for live performance.
 
-> The [JS/WASM demo]({{ "/vgmweb/" | relative_url }}) plays best with Chrome
+> [JS/WASM demo]({{ "/vgmweb/" | relative_url }}) (first grab the VGZ file here: [Shop Hard by Televicious]({{ "/assets/vgz/shophard.vgz" | relative_url }}))
 
 ## Why the long route of Go?
 

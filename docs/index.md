@@ -13,3 +13,4 @@ release notes, design decisions, and the occasional rant will land.
 - [Source on GitHub](https://github.com/erik-adelbert/duh)
 - [README](https://github.com/erik-adelbert/duh#readme)
 - [Issues](https://github.com/erik-adelbert/duh/issues)
+- [Demo](https://erik-adelbert.github.io/duh/vgmweb) (first grab the VGZ file here: [Shop Hard by Televicious]({{ "/assets/vgz/shophard.vgz" | relative_url }}))
