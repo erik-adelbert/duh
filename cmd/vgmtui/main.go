@@ -185,8 +185,6 @@ func play(oto *backend.OtoBackend, in *vgm.Decoder, a args) (err error) {
 		return fmt.Errorf("failed to create audio player")
 	}
 
-	defer player.Close()
-
 	// Set up signal handling for graceful termination
 	ctrlc, stop := sighandle(os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -298,7 +296,6 @@ func play(oto *backend.OtoBackend, in *vgm.Decoder, a args) (err error) {
 	}
 
 	player.Pause()
-	player.Close()
 
 	return nil
 }

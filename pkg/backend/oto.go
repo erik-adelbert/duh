@@ -22,7 +22,11 @@ type OtoBackend struct {
 	opts *oto.NewContextOptions
 }
 
-func NewOtoBackend(format pcm.Format, wasm bool) (*OtoBackend, error) {
+func NewOtoBackend(format pcm.Format, wasm bool) (ob *OtoBackend, err error) {
+	defer func() {
+		err = mkError(ErrBackend, err)
+	}()
+
 	ifmt := format
 	ofmt := format
 
@@ -124,7 +128,11 @@ func (b *OtoBackend) NewPlayer(r io.Reader) *OtoPlayer {
 
 func (b *OtoBackend) Close() {}
 
-func (p *OtoPlayer) Seek(offset int64, whence int) (int64, error) {
+func (p *OtoPlayer) Seek(offset int64, whence int) (n int64, err error) {
+	defer func() {
+		err = mkError(ErrSeek, err)
+	}()
+
 	if p.rs == nil {
 		return 0, ErrESPIPE
 	}

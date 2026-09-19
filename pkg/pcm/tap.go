@@ -153,8 +153,8 @@ func (r *TapReader) Read(p []byte) (n int, err error) {
 
 	n, err = r.r.Read(p)
 
-	if n > 0 && r.Tap != nil {
-		_, _ = r.Tap.Write(p[:n])
+	if n > 0 {
+		_, _ = r.Write(p[:n])
 	}
 
 	return n, err
@@ -171,9 +171,7 @@ func (r *TapReader) Seek(offset int64, whence int) (int64, error) {
 		return 0, err
 	}
 
-	if r.Tap != nil {
-		r.Tap.Reset()
-	}
+	r.Reset()
 
 	return pos, nil
 }

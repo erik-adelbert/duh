@@ -154,7 +154,4 @@ func openTTY() (close func()) {
 	}
 }
 
-var (
-	die      = xflags.MkDie(tty)
-	verbosef = xflags.MkVerbosef(tty)
-)
+var die = xflags.MkDie(tty)

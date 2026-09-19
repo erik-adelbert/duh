@@ -204,7 +204,6 @@ func play(oto *backend.OtoBackend, in io.Reader, a args) (err error) {
 		select {
 		case <-ctrlc: // Exit on Ctrl+C
 			player.Pause()
-			player.Close()
 
 			return nil // Exit gracefully on Ctrl+C
 		case <-vsyncer.C: // Draw a frame

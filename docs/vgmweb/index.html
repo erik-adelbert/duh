@@ -1,68 +1,70 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>duh vgmweb</title>
 
-    <title>duh vgmweb</title>
+  <style>
+    html, body {
+      margin: 0;
+      background: #000;
+    }
 
-    <style>
-        html, body {
-            margin: 0;
-            background: #000;
-        }
+    #controls {
+      margin: 30px;
+    }
 
-        #controls {
-            margin: 30px;
-        }
-
-        #terminal-frame {
-            display: block;
-            margin: 10px;
-            width: 84ch;
-            height: 54em;
-            border: 0;
-        }
-    </style>
+    #terminal-frame {
+      display: block;
+      margin: 10px;
+      width: 84ch;
+      height: 54em;
+      border: 0;
+    }
+  </style>
 </head>
 
 <body>
-    <div id="controls">
-        <input id="file" type="file" accept=".vgm,.vgz">
+  <div id="controls">
+    <input id="file" type="file" accept=".vgm,.vgz">
 
-        <div style="margin-top: 6px; color: #ccc;">
-            Grab an OPL3 file from OPL Archive. Please don't hammer the site.
-        </div>
+    <div style="margin-top: 6px; color: #ccc;">
+      Grab an OPL3 file from OPL Archive. Please don't hammer the site.
     </div>
+  </div>
 
-    <iframe
-        id="terminal-frame"
-        src="vgm.html"
-        title="VGM player">
-    </iframe>
+  <iframe
+    id="terminal-frame"
+    src="vgm.html"
+    title="VGM player"
+    allow="autoplay">
+  </iframe>
 
-    <script>
-        const frame = document.getElementById("terminal-frame");
-        const fileInput = document.getElementById("file");
+  <script>
+    const frame = document.getElementById("terminal-frame");
+    const fileInput = document.getElementById("file");
 
-        fileInput.addEventListener("change", async event => {
-            const file = event.target.files[0];
-            if (!file) {
-                return;
-            }
+    fileInput.addEventListener("change", async event => {
+      const file = event.target.files[0];
 
-            console.log("FILE:", file.name, file.size);
+      if (!file) {
+        return;
+      }
 
-            const buffer = await file.arrayBuffer();
+      console.log("FILE:", file.name, file.size);
 
-            frame.contentWindow.postMessage(
-                {
-                    type: "play",
-                    data: buffer
-                },
-                "*"
-            );
-        });
-    </script>
+      const buffer = await file.arrayBuffer();
+
+      frame.contentWindow.postMessage(
+        {
+          type: "play",
+          data: buffer
+        },
+        "*"
+      );
+    });
+  </script>
 </body>
+
 </html>

@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/erik-adelbert/duh/internal/tui"
-	"github.com/erik-adelbert/duh/pkg/backend"
+	"github.com/erik-adelbert/duh/pkg/opl3"
 	"github.com/erik-adelbert/duh/pkg/pcm"
 	vgm "github.com/erik-adelbert/duh/pkg/vgmo3"
 )
@@ -35,19 +35,31 @@ type Input interface {
 
 type Printer func(string)
 
-func run(out Printer, oto *backend.OtoBackend, in *vgm.Decoder) error {
-	in.SetLoopCount(-1)
-	return play(out, oto, in)
+func run(screen Printer, audio *JSOut, in *vgm.Decoder) error {
+	in.SetLoopCount(1)
+
+	src, ui := mktui(in)
+	defer ui.Stop()
+
+	quit := make(chan struct{})
+	done := make(chan error, 1)
+
+	go func() {
+		err := play(src, audio)
+		close(quit)
+
+		done <- err
+	}()
+
+	if err := display(screen, ui, quit); err != nil {
+		return err
+	}
+
+	return <-done
 }
 
 func main() {
-	vfmt, _ := pcm.ParseFormat(pcm.OPL3)
-	oto, err := backend.NewOtoBackend(vfmt, true)
-
-	if err != nil {
-		js.Global().Call("renderError", err.Error())
-		return
-	}
+	audio := NewJSOut()
 
 	js.Global().Set("run", js.FuncOf(func(this js.Value, args []js.Value) any {
 		data := args[0]
@@ -55,25 +67,25 @@ func main() {
 		buf := make([]byte, data.Get("length").Int())
 		js.CopyBytesToGo(buf, data)
 
-		in, err := vgm.Decode(bytes.NewReader(buf), int64(len(buf)))
-		if err != nil {
-			return err.Error()
-		}
-
 		go func() {
+			in, err := vgm.Decode(bytes.NewReader(buf), int64(len(buf)))
+			if err != nil {
+				js.Global().Call("renderError", err.Error())
+				return
+			}
 			defer in.Close() //nolint:errcheck
 
-			err := run(
+			err = run(
 				func(screen string) {
 					js.Global().Call("renderScreen", screen)
 				},
-				oto, in,
+				audio,
+				in,
 			)
 
 			if err != nil {
 				js.Global().Call("renderError", err.Error())
 			}
-
 		}()
 
 		return nil
@@ -82,14 +94,31 @@ func main() {
 	select {}
 }
 
-const (
-	BandCount = 64
-	MinHz     = 50 * Hz
-	MaxHz     = 20_000 * Hz
-)
+type webtui struct {
+	duration string
 
-func play(out Printer, oto *backend.OtoBackend, in *vgm.Decoder) (err error) {
+	tap *pcm.Tap
+
+	sp   tui.Spectro
+	vbL  tui.VuBar
+	vbR  tui.VuBar
+	regs *tui.OPL3State
+
+	opl3 *opl3.Device
+}
+
+// mktui creates a webtui instance for the given VGM decoder and returns an io.Reader
+// that taps the audio data for analysis.
+func mktui(in *vgm.Decoder) (io.Reader, *webtui) {
+	const (
+		BandCount = 64
+		MinHz     = 50 * Hz
+		MaxHz     = 20_000 * Hz
+	)
+
 	var (
+		err error
+
 		sp  tui.Spectro
 		vbL tui.VuBar
 		vbR tui.VuBar
@@ -102,21 +131,23 @@ func play(out Printer, oto *backend.OtoBackend, in *vgm.Decoder) (err error) {
 	)
 
 	if err != nil {
-		return err
+		return in, nil
 	}
 
 	vbL = tui.NewVuBar()
 	vbR = tui.NewVuBar()
 
+	OPL3Regs := tui.NewOPL3State()
+
 	const (
 		WindowSize     = 2048
 		HopSize        = 1470
-		BufferDuration = 700 * ms
+		BufferDuration = 500 * ms
 	)
 
 	// Set up a PCM tap to analyze the audio data for the spectrogram and vubars
 	tap, _ := pcm.NewTap(in.Format(), BufferDuration, WindowSize, HopSize)
-	defer tap.Stop()
+	// defer tap.Stop() // Removed defer stop to allow manual control via webtui.Stop()
 
 	// Set up the tap's update function to feed the analyzers
 	tap.UpdateFunc(func(samples []float64, nchan int) {
@@ -142,17 +173,81 @@ func play(out Printer, oto *backend.OtoBackend, in *vgm.Decoder) (err error) {
 
 	src = io.TeeReader(in, tap)
 
-	OPL3Regs := tui.NewOPL3State()
+	return src, &webtui{
+		tap: tap,
 
-	// oto, err := backend.NewOtoBackend(src, in.Format(), true)
-	player := oto.NewPlayer(src)
-	if err != nil {
-		return err
+		sp:   sp,
+		vbL:  vbL,
+		vbR:  vbR,
+		regs: OPL3Regs,
+
+		opl3: in.Device,
+
+		duration: tui.TimerString(in.Duration()),
 	}
+}
 
-	// Start playback
-	player.Play()
-	duration := tui.TimerString(in.Duration())
+func (w *webtui) Stop() {
+	w.tap.Stop()
+}
+
+func play(in io.Reader, audio *JSOut) (err error) {
+	buf := make([]byte, 16*1024)
+
+	const (
+		sampleRate    = 44100
+		bytesPerFrame = 4 // stereo s16le
+	)
+
+	var naudio int64
+
+	start := time.Now()
+	_ = start
+
+	for {
+		n, err := in.Read(buf)
+
+		if n > 0 {
+			if _, err := audio.Write(buf[:n]); err != nil {
+				return err
+			}
+
+			naudio += int64(n)
+
+			/*
+			 * Keep the decoder approximately synchronized
+			 * with real playback time.
+			 */
+			target := time.Duration(
+				naudio * int64(time.Second) /
+					int64(sampleRate*bytesPerFrame),
+			)
+
+			if wait := target - time.Since(start); wait > 0 {
+				time.Sleep(wait)
+			}
+		}
+
+		switch err {
+		case nil:
+		case io.EOF:
+			return nil
+		default:
+			return err
+		}
+	}
+}
+
+func display(screen Printer, w *webtui, quit chan struct{}) (err error) {
+	sp := w.sp
+	vbL := w.vbL
+	vbR := w.vbR
+
+	opl3 := w.opl3
+	OPL3Regs := w.regs
+
+	duration := w.duration
+
 	started := time.Now()
 
 	// Launch the frame ticker
@@ -171,14 +266,12 @@ func play(out Printer, oto *backend.OtoBackend, in *vgm.Decoder) (err error) {
 	defer housekeep.Stop()
 
 	// Set up the alternate screen buffer
-	altScreen(out, true)
-	defer altScreen(out, false)
+	altScreen(screen, true)
+	defer altScreen(screen, false)
 
 	// Frame state
 	var (
 		title = "duh vgmweb\n\n"
-
-		OPL3 = in.Device
 
 		pads = tui.Mkpad(leftMargin)
 
@@ -191,8 +284,10 @@ func play(out Printer, oto *backend.OtoBackend, in *vgm.Decoder) (err error) {
 	sb.Grow(FrameSz)
 
 	// Event loop
-	for player.IsPlaying() {
+	for {
 		select {
+		case <-quit: // Exit the display loop
+			return nil
 		case <-vsyncer.C: // Draw a frame
 			sb.Reset()
 
@@ -220,7 +315,7 @@ func play(out Printer, oto *backend.OtoBackend, in *vgm.Decoder) (err error) {
 
 			OPL3Regs.Render(&sb, pads)
 
-			out(sb.String())
+			screen(sb.String())
 		case <-housekeep.C: // Housekeeping tasks
 			now := time.Now()
 
@@ -229,15 +324,11 @@ func play(out Printer, oto *backend.OtoBackend, in *vgm.Decoder) (err error) {
 
 			sb.Reset()
 
-			if st, ok := OPL3.State(); ok {
+			if st, ok := opl3.State(); ok {
 				OPL3Regs.Update(&sb, st)
 			}
 		}
 	}
-
-	player.PauseAndStopReading()
-
-	return nil
 }
 
 func altScreen(out Printer, on bool) {
@@ -247,6 +338,25 @@ func altScreen(out Printer, on bool) {
 	}
 
 	out(tui.AltScreen(false))
+}
+
+type JSOut struct {
+	write js.Value
+}
+
+func NewJSOut() *JSOut {
+	return &JSOut{
+		write: js.Global().Get("writeAudio"),
+	}
+}
+
+func (o *JSOut) Write(p []byte) (int, error) {
+	buf := js.Global().Get("Uint8Array").New(len(p))
+	js.CopyBytesToJS(buf, p)
+
+	o.write.Invoke(buf)
+
+	return len(p), nil
 }
 
 const (

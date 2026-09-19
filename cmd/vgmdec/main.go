@@ -11,7 +11,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/erik-adelbert/duh/pkg/vgmo3"
+	vgm "github.com/erik-adelbert/duh/pkg/vgmo3"
 	"github.com/erik-adelbert/duh/pkg/xflags"
 )
 
@@ -22,7 +22,7 @@ func main() {
 	infos, err := f.Stat()
 	die(err, "Failed to get file info", 1)
 
-	in, err := vgmo3.Decode(f, infos.Size())
+	in, err := vgm.Decode(f, infos.Size())
 	die(err, "Failed to create VGM reader", 1)
 
 	_, err = io.Copy(os.Stdout, in)
