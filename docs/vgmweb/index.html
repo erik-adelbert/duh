@@ -9,10 +9,26 @@
     html, body {
       margin: 0;
       background: #000;
+      font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    }
+
+    #buttons {
+      display: flex;
+      align-items: center;
     }
 
     #controls {
       margin: 30px;
+    }
+
+    #controls button {
+      margin-left: 2px;
+      margin-right: 10px;
+      padding: 4px 12px;
+    }
+
+    #controls button:disabled {
+      opacity: 0.45;
     }
 
     #terminal-frame {
@@ -27,12 +43,15 @@
 
 <body>
   <div id="controls">
-    <input id="file" type="file" accept=".vgm,.vgz">
+    <div id="buttons">
+      <input id="file" type="file" accept=".vgm,.vgz" hidden >
+      <button id="choose">Choose VGM</button>
+      <button id="play" disabled>Play</button>
+    </div>
 
-    <button id="start" disabled>Start</button>
-
-    <div style="margin-top: 6px; color: #ccc;">
-      Grab an OPL3 file from OPL Archive. Please don't hammer the site.
+    <div style="margin-top: 6px; color: #ccc;white-space: pre-line;">
+      Grab an OPL3 file from OPL Archive.
+      Please don't hammer the site.
     </div>
   </div>
 
@@ -46,7 +65,19 @@
   <script>
     const frame = document.getElementById("terminal-frame");
     const fileInput = document.getElementById("file");
-    const startButton = document.getElementById("start");
+    const playButton = document.getElementById("play");
+    const chooseButton = document.getElementById("choose");
+
+    window.addEventListener("message", event => {
+      if (event.data?.type === "playback-ended") {
+        chooseButton.disabled = false;
+      }
+    });
+
+    chooseButton.addEventListener("click", () => {
+        fileInput.click();
+        chooseButton.disabled = true;
+    });
 
     let pendingData = null;
 
@@ -61,10 +92,10 @@
 
       pendingData = await file.arrayBuffer();
 
-      startButton.disabled = false;
+      playButton.disabled = false;
     });
 
-    startButton.addEventListener("click", () => {
+    playButton.addEventListener("click", () => {
       if (!pendingData) {
         return;
       }
@@ -80,7 +111,8 @@
         "*"
       );
 
-      startButton.disabled = true;
+      chooseButton.disabled = true;
+      playButton.disabled = true;
     });
   </script>
 </body>

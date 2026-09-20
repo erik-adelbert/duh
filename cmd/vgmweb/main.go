@@ -86,6 +86,8 @@ func main() {
 			if err != nil {
 				js.Global().Call("renderError", err.Error())
 			}
+
+			js.Global().Call("playbackEnded")
 		}()
 
 		return nil
@@ -202,7 +204,8 @@ func play(in io.Reader, audio *JSOut) (err error) {
 	var naudio int64
 
 	start := time.Now()
-	_ = start
+
+	bps := int64(sampleRate * bytesPerFrame)
 
 	for {
 		n, err := in.Read(buf)
@@ -218,12 +221,9 @@ func play(in io.Reader, audio *JSOut) (err error) {
 			 * Keep the decoder approximately synchronized
 			 * with real playback time.
 			 */
-			target := time.Duration(
-				naudio * int64(time.Second) /
-					int64(sampleRate*bytesPerFrame),
-			)
+			target := time.Duration(naudio * int64(time.Second) / bps)
 
-			if wait := target - time.Since(start); wait > 0 {
+			if wait := target - time.Since(start); wait > 2*time.Millisecond {
 				time.Sleep(wait)
 			}
 		}
@@ -311,7 +311,7 @@ func display(screen Printer, w *webtui, quit chan struct{}) (err error) {
 
 			fmt.Fprintf(&sb, "%s%s / %s", pads, tui.TimerString(elapsed), duration)
 
-			sb.WriteString(tui.Red(" ∞\n"))
+			sb.WriteString(tui.Green("x1\n"))
 
 			OPL3Regs.Render(&sb, pads)
 

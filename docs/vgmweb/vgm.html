@@ -141,6 +141,13 @@
       );
     };
 
+    globalThis.playbackEnded = function() {
+      window.parent.postMessage(
+        { type: "playback-ended" },
+        "*"
+      );
+    };
+
 
     /*
      * Receive a VGM file from index.html.
