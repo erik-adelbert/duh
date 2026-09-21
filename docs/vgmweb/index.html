@@ -3,47 +3,47 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96" />
+  <link rel="shortcut icon" href="favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <link rel="manifest" href="site.webmanifest" />
 
   <style>
     html, body {
       margin: 0;
       background: #000;
-      font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
-    }
-
-    #buttons {
-      display: flex;
-      align-items: center;
+      font-family: monospace;
     }
 
     #controls {
       margin: 30px;
     }
 
-    #controls button {
-      margin-left: 2px;
-      margin-right: 10px;
+    #buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
       padding: 4px 12px;
     }
 
-    #controls button:disabled {
-      opacity: 0.45;
+    button:disabled {
+      opacity: .45;
+    }
+
+    #info {
+      margin-top: 6px;
+      color: #ccc;
+      white-space: pre-line;
     }
 
     #terminal-frame {
-      display: block;
       margin: 10px;
       width: 84ch;
       height: 1400px;
       border: 0;
-    }
-
-    #terminal {
-      width: 84ch;
-      height: 1400px;
-      overflow: hidden;
     }
   </style>
 </head>
@@ -51,12 +51,12 @@
 <body>
   <div id="controls">
     <div id="buttons">
-      <input id="file" type="file" accept=".vgm,.vgz" hidden >
+      <input id="file" type="file" accept=".vgm,.vgz" hidden>
       <button id="choose">Choose VGM</button>
       <button id="play" disabled>Play</button>
     </div>
 
-    <div style="margin-top: 6px; color: #ccc;white-space: pre-line;">
+    <div id="info">
       Grab an OPL3 file from OPL Archive.
       Please don't hammer the site.
     </div>
@@ -72,62 +72,45 @@
   <script>
     const frame = document.getElementById("terminal-frame");
     const fileInput = document.getElementById("file");
-    const playButton = document.getElementById("play");
     const chooseButton = document.getElementById("choose");
+    const playButton = document.getElementById("play");
+
+    let pendingFile;
 
     window.addEventListener("message", event => {
-      if (event.data?.type === "playback-ended") {
+      if (event.data?.type === "playback-ended")
         chooseButton.disabled = false;
-      }
     });
 
-    chooseButton.addEventListener("click", () => {
-        fileInput.click();
-        chooseButton.disabled = true;
-    });
+    chooseButton.onclick = () => {
+      fileInput.click();
+      chooseButton.disabled = true;
+    };
 
-    let pendingData = null;
-    let pendingName = null;
+    fileInput.onchange = async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
 
-    fileInput.addEventListener("change", async event => {
-      const file = event.target.files[0];
-
-      if (!file) {
-        return;
-      }
-
-      console.log("FILE:", file.name, file.size);
-
-      pendingData = await file.arrayBuffer();
-      pendingName = file.name;
+      pendingFile = {
+        data: await file.arrayBuffer(),
+        name: file.name
+      };
 
       playButton.disabled = false;
-    });
+    };
 
-    playButton.addEventListener("click", () => {
-      if (!pendingData) {
-        return;
-      }
+    playButton.onclick = () => {
+      if (!pendingFile) return;
 
-      const data = pendingData;
-      pendingData = null;
+      frame.contentWindow.postMessage({
+        type: "play",
+        ...pendingFile
+      }, "*");
 
-      const name = pendingName;
-      pendingName = null;
-
-      frame.contentWindow.postMessage(
-        {
-          type: "play",
-          data: data,
-          name: name
-        },
-        "*"
-      );
-
+      pendingFile = null;
       chooseButton.disabled = true;
       playButton.disabled = true;
-    });
+    };
   </script>
 </body>
-
 </html>

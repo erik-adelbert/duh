@@ -22,9 +22,7 @@
   </style>
 
   <script src="wasm_exec.js"></script>
-
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
-
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.19.0/lib/addon-webgl.js"></script>
 </head>
 
@@ -33,67 +31,35 @@
 
   <script>
     const SAMPLE_RATE = 44100;
-
-    let audioContext = null;
-    let audioNode = null;
-    let audioReady = null;
+    let audioContext;
+    let audioNode;
+    let audioReady;
 
     async function initAudio() {
-      if (audioReady) {
-        return audioReady;
-      }
+      if (audioReady) return audioReady;
 
       audioReady = (async () => {
-        audioContext = new AudioContext({
-          sampleRate: SAMPLE_RATE
+        audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
+
+        await audioContext.audioWorklet.addModule("pcm-worklet.js");
+
+        audioNode = new AudioWorkletNode(audioContext, "pcm-player", {
+          numberOfInputs: 0,
+          numberOfOutputs: 1,
+          outputChannelCount: [2]
         });
 
-        await audioContext.audioWorklet.addModule(
-          "pcm-worklet.js"
-        );
-
-        audioNode = new AudioWorkletNode(
-          audioContext,
-          "pcm-player",
-          {
-            numberOfInputs: 0,
-            numberOfOutputs: 1,
-            outputChannelCount: [2]
-          }
-        );
-
         audioNode.connect(audioContext.destination);
-
         await audioContext.resume();
-
-        console.log(
-          "Audio ready:",
-          audioContext.sampleRate,
-          audioContext.state
-        );
       })();
 
       return audioReady;
     }
 
-    /*
-     * Go calls this with raw signed 16-bit little-endian PCM.
-     * The Uint8Array is transferred to the AudioWorklet.
-     */
-    globalThis.writeAudio = function(bytes) {
-      if (!audioNode) {
-        console.error(
-          "writeAudio: audio node is not initialized"
-        );
-        return;
-      }
-
-      audioNode.port.postMessage(
-        bytes,
-        [bytes.buffer]
-      );
+    globalThis.writeAudio = bytes => {
+      if (!audioNode) return;
+      audioNode.port.postMessage(bytes, [bytes.buffer]);
     };
-
 
     const term = new Terminal({
       cols: 84,
@@ -106,115 +72,55 @@
       lineHeight: 1.1
     });
 
-    term.open(
-      document.getElementById("terminal")
-    );
-
+    term.open(document.getElementById("terminal"));
 
     try {
-      term.loadAddon(
-        new WebglAddon.WebglAddon()
-      );
-
-      console.log(
-        "WebGL acceleration activated successfully."
-      );
-    } catch (e) {
-      console.warn(
-        "WebGL addon failed to load, " +
-        "falling back to canvas/DOM engine:",
-        e
-      );
+      term.loadAddon(new WebglAddon.WebglAddon());
+    } catch {
+      // do nothing, xterm uses the canvas/DOM engine
     }
 
-    globalThis.renderScreen = function(screen) {
-      term.write(screen);
-    };
+    globalThis.renderScreen = screen => term.write(screen);
 
-    globalThis.renderError = function(error) {
+    globalThis.renderError = error => {
       console.error(error);
-
-      term.write(
-        "\r\n\x1b[31m" +
-        error +
-        "\x1b[0m\r\n"
-      );
+      term.write(`\r\n\x1b[31m${error}\x1b[0m\r\n`);
     };
 
-    globalThis.playbackEnded = function() {
-      window.parent.postMessage(
-        { type: "playback-ended" },
-        "*"
-      );
+    globalThis.playbackEnded = () => {
+      parent.postMessage({ type: "playback-ended" }, "*");
     };
 
+    window.addEventListener("message", async event => {
+      if (event.data?.type !== "play") return;
 
-    /*
-     * Receive a VGM file from index.html.
-     */
-    window.addEventListener(
-      "message",
-      async event => {
-        if (
-          !event.data ||
-          event.data.type !== "play"
-        ) {
-          return;
-        }
+      try {
+        document.title = event.data.name || "duh vgmweb";
 
-        try {
-          document.title = event.data.name || "duh vgmweb";
+        await initAudio();
 
-          /*
-           * Audio must be initialized before Go starts
-           * calling writeAudio().
-           */
-          await initAudio();
+        term.clear();
+        term.write("\x1b[2J\x1b[H");
 
-          const data =
-            new Uint8Array(event.data.data);
+        const result = globalThis.run(
+          new Uint8Array(event.data.data)
+        );
 
-          term.clear();
-          term.write("\x1b[2J\x1b[H");
-
-          /*
-           * globalThis.run is installed by the Go/WASM
-           * program.
-           */
-          const result =
-            globalThis.run(data);
-
-          if (result) {
-            renderError(result);
-          }
-
-        } catch (err) {
-          console.error(err);
-          renderError(String(err));
-        }
+        if (result) renderError(result);
+      } catch (error) {
+        renderError(error);
       }
-    );
+    });
 
-
-    /*
-     * Start Go/WASM.
-     */
     const go = new Go();
 
     WebAssembly.instantiateStreaming(
       fetch("vgmweb.wasm"),
       go.importObject
     )
-      .then(result => {
-        return go.run(result.instance);
-      })
-      .catch(err => {
-        term.write(
-          "\r\n" +
-          "\x1b[31mFailed to load WASM:\x1b[0m\r\n"
-        );
-
-        term.write(String(err));
+      .then(({ instance }) => go.run(instance))
+      .catch(error => {
+        renderError(`Failed to load WASM:\r\n${error}`);
       });
   </script>
 </body>
