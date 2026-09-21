@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>duh vgmweb</title>
+
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
 
   <style>
     html, body {
@@ -86,6 +87,7 @@
     });
 
     let pendingData = null;
+    let pendingName = null;
 
     fileInput.addEventListener("change", async event => {
       const file = event.target.files[0];
@@ -97,6 +99,7 @@
       console.log("FILE:", file.name, file.size);
 
       pendingData = await file.arrayBuffer();
+      pendingName = file.name;
 
       playButton.disabled = false;
     });
@@ -109,10 +112,14 @@
       const data = pendingData;
       pendingData = null;
 
+      const name = pendingName;
+      pendingName = null;
+
       frame.contentWindow.postMessage(
         {
           type: "play",
-          data: data
+          data: data,
+          name: name
         },
         "*"
       );

@@ -163,6 +163,8 @@
         }
 
         try {
+          document.title = event.data.name || "duh vgmweb";
+
           /*
            * Audio must be initialized before Go starts
            * calling writeAudio().
