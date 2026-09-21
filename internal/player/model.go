@@ -16,7 +16,7 @@ import (
 
 const TUIRefreshRate = 30 * FPS
 
-func NewTUI(ctrl *Controller, name string, tap *pcm.Tap, withVu, withSpectrum bool, emoji bool) tea.Model {
+func NewTUI(ctrl *Controller, name string, tap *pcm.Tap, withVu, withSpectro bool, emoji bool) tea.Model {
 	m := &model{
 		ctrl:   ctrl,
 		name:   name,
@@ -24,7 +24,7 @@ func NewTUI(ctrl *Controller, name string, tap *pcm.Tap, withVu, withSpectrum bo
 		volume: 0.5,
 
 		withVu:     withVu,
-		withSpecto: withSpectrum,
+		withSpecto: withSpectro,
 
 		tap: tap,
 	}
@@ -41,8 +41,8 @@ func NewTUI(ctrl *Controller, name string, tap *pcm.Tap, withVu, withSpectrum bo
 		})
 	}
 
-	if withSpectrum {
-		sr := ctrl.a.SampleRate()
+	if withSpectro {
+		sr := ctrl.p.SampleRate()
 		m.spectro, _ = tui.NewSpectro(sr, 0, 0, 0, emoji)
 
 		sampleCBs = append(sampleCBs, func(lf, rf float64) {

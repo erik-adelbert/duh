@@ -13,15 +13,15 @@ import (
 )
 
 type Controller struct {
-	a backend.Player
+	p backend.Player
 }
 
-func NewController(a backend.Player) *Controller {
-	return &Controller{a: a}
+func NewController(p backend.Player) *Controller {
+	return new(Controller{p: p})
 }
 
 func (c *Controller) IsPlaying() bool {
-	return c.a.IsPlaying()
+	return c.p.IsPlaying()
 }
 
 func (c *Controller) Play() {
@@ -29,11 +29,11 @@ func (c *Controller) Play() {
 		c.Rewind()
 	}
 
-	c.a.Play()
+	c.p.Play()
 }
 
 func (c *Controller) Pause() {
-	c.a.Pause()
+	c.p.Pause()
 }
 
 func (c *Controller) Toggle() {
@@ -47,7 +47,7 @@ func (c *Controller) Toggle() {
 }
 
 func (c *Controller) SetVolume(volume float64) {
-	c.a.SetVolume(volume)
+	c.p.SetVolume(volume)
 }
 
 func (c *Controller) Snapshot() (Position, Position, bool) {
@@ -60,32 +60,32 @@ func (c *Controller) Snapshot() (Position, Position, bool) {
 func (c *Controller) hasEnded() bool {
 	pos, dur := c.position()
 
-	return !c.a.IsPlaying() && abs(pos-dur) <= Position(500*time.Millisecond)
+	return !c.p.IsPlaying() && abs(pos-dur) <= Position(500*time.Millisecond)
 }
 
 func (c *Controller) position() (Position, Position) {
-	off := c.a.Position()
-	spr := c.a.SampleRate()
-	nch := c.a.ChannelCount()
-	bps := c.a.BitDepth() / 8
+	off := c.p.Position()
+	spr := c.p.SampleRate()
+	nch := c.p.ChannelCount()
+	bps := c.p.BitDepth() / 8
 
 	pos := int64(time.Second) * off / int64(spr*nch*bps)
 
-	dur := c.a.Duration()
+	dur := c.p.Duration()
 
 	return Position(pos), Position(dur)
 }
 
 func (c *Controller) offset(p Position) int64 {
-	spr := c.a.SampleRate()
-	nch := c.a.ChannelCount()
-	bps := c.a.BitDepth() / 8
+	spr := c.p.SampleRate()
+	nch := c.p.ChannelCount()
+	bps := c.p.BitDepth() / 8
 
 	return int64(p) * int64(spr*nch*bps) / int64(time.Second)
 }
 
 func (c *Controller) Rewind() {
-	_, _ = c.a.Seek(0, io.SeekStart)
+	_, _ = c.p.Seek(0, io.SeekStart)
 }
 
 func (c *Controller) ForwardBy(d Position) {
@@ -96,7 +96,7 @@ func (c *Controller) ForwardBy(d Position) {
 	}
 
 	dst := c.offset(d + pos)
-	_, _ = c.a.Seek(dst, io.SeekStart)
+	_, _ = c.p.Seek(dst, io.SeekStart)
 }
 
 func (c *Controller) RewindBy(d Position) {
@@ -107,7 +107,7 @@ func (c *Controller) RewindBy(d Position) {
 	}
 
 	dst := c.offset(pos - d)
-	_, _ = c.a.Seek(dst, io.SeekStart)
+	_, _ = c.p.Seek(dst, io.SeekStart)
 }
 
 type Position time.Duration
