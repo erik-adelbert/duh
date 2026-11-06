@@ -36,3 +36,8 @@ cmd/vgmtui/logs/
 .vscode/
 *.swp
 *.swo
+
+# Miscellaneous
+fm_banks/
+fm_banks_new/
+*.cache
