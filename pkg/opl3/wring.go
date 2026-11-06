@@ -111,3 +111,11 @@ func (wr *wring) flush() {
 
 	wr.nwrite++
 }
+
+func (wr *wring) clear() {
+	for i := range wr.buf {
+		wr.buf[i] = wrop{}
+	}
+
+	wr.bufState = bufState{}
+}

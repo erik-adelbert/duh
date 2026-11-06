@@ -51,6 +51,7 @@ type channel struct {
 	ksv      uint8
 	cha, chb uint16
 	chc, chd uint16
+	chl, chr uint16 // soft-panning gains, 0xffff when unused
 }
 
 func (c *channel) processSlots(gen uint32, withRhythm bool) {

@@ -37,6 +37,7 @@ type Device struct {
 
 	addrs [2]uint8
 
+	taccs  [2]time.Duration
 	timers [2]*timer
 
 	sampleFrac float64
@@ -54,7 +55,7 @@ func NewDevice(sampleRate int) *Device {
 }
 
 func NewDeviceWithClock(sampleRate, clockHz int) *Device {
-	return new(Device{
+	d := new(Device{
 		sampleRate: sampleRate,
 
 		timers: [2]*timer{
@@ -64,6 +65,8 @@ func NewDeviceWithClock(sampleRate, clockHz int) *Device {
 
 		chip: NewChipWithClock(sampleRate, clockHz),
 	})
+
+	return d
 }
 
 func (d *Device) Format() pcm.Format {
@@ -81,23 +84,24 @@ func (d *Device) Run(δt time.Duration) (sampleCount int) {
 		return 0
 	}
 
-	// Tick the timers for every device tick rate that has passed.
-	d.μsAcc += δt
-	for d.μsAcc >= tickRate0 {
+	d.taccs[0] += δt
+	d.taccs[1] += δt
 
-		d.timers[0].tick(tickRate0)
-		d.timers[1].tick(tickRate1)
-
-		d.μsAcc -= tickRate0
+	for d.taccs[0] >= timerRate0 {
+		d.taccs[0] -= timerRate0
+		d.timers[0].tick(timerRate0)
 	}
 
-	t := d.μsAcc.Seconds()
+	for d.taccs[1] >= timerRate1 {
+		d.taccs[1] -= timerRate1
+		d.timers[1].tick(timerRate1)
+	}
 
-	// Calculate the number of samples generated and accumulate the fractional.
-	samples := t*float64(d.sampleRate) + d.sampleFrac
-	d.sampleFrac = samples - math.Floor(samples)
+	exact := δt.Seconds()*float64(d.sampleRate) + d.sampleFrac
+	whole := math.Floor(exact)
+	d.sampleFrac = exact - whole
 
-	return int(samples)
+	return int(whole)
 }
 
 func (d *Device) RunN(sampleCount int) int {
@@ -117,8 +121,6 @@ func (d *Device) RunN(sampleCount int) int {
 
 func (d *Device) Resample2Ch(out []int16) {
 	d.chip.Resample2Ch(out)
-
-	d.Snapshot()
 	d.SampleCount++
 }
 
@@ -197,26 +199,46 @@ func (d *Device) WriteRegister(bank, reg, data uint8, buffered bool) {
 	} else {
 		d.chip.WriteReg(reg16, data)
 	}
+
+	d.Snapshot()
 }
 
-func (d *Device) Reset(sampleRate int) (err error) {
-	return d.ResetWithClock(sampleRate, YMF262ClockHz)
+// WritePan queues a soft-panning write for the channel whose C0 register is
+// reg: pos is the MIDI pan position, 0 (left) to 127 (right).
+func (d *Device) WritePan(bank, reg, pos uint8) {
+	if bank > Bank1 {
+		return
+	}
+
+	d.chip.QueueReg(panReg|uint16(bank)<<8|uint16(reg), pos)
 }
 
-func (d *Device) ResetWithClock(sampleRate, clockHz int) (err error) {
+func (d *Device) Reset() (err error) {
+	return d.ResetWithClock()
+}
+
+func (d *Device) ResetWithClock() (err error) {
 	defer func() {
 		err = mkError(ErrDevice, err)
 	}()
 
-	if sampleRate <= 0 {
-		return mkError(errSampleRate, "sample rate must be positive")
+	d.chip.Reset()
+
+	d.addrs = [2]uint8{}
+	clear(d.regs[:])
+	d.sampleFrac = 0
+	d.μsAcc = 0
+
+	for _, t := range d.timers {
+		if t != nil {
+			t.reset(0)
+		}
 	}
 
-	d.sampleRate = sampleRate
+	if cur := d.state.Swap(nil); cur != nil {
+		cur.Free()
+	}
 
-	d.chip.ResetWithClock(d.sampleRate, clockHz)
-
-	clear(d.regs[:])
 	d.Counter = Counter{}
 
 	return nil
@@ -253,6 +275,10 @@ func (d *Device) State() (State, bool) {
 	return zero, false
 }
 
+func (d *Device) OPL3Mode() bool {
+	return has(d.regs[Bank1][0x05], 0x01)
+}
+
 func (d *Device) timerStatus() (status uint8) {
 	ok0 := d.timers[0].isElapsed()
 	ok1 := d.timers[1].isElapsed()
@@ -284,9 +310,6 @@ func (dc *Counter) ResetCounter() {
 }
 
 const (
-	tickRate0 = 80 * μs
-	tickRate1 = 320 * μs
-
 	timerMask0 = 0b0100_0000
 	timerMask1 = 0b0010_0000
 	timerIRQ   = 0b1000_0000

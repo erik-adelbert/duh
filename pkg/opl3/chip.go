@@ -155,6 +155,8 @@ func NewChipWithClock(sampleRate, clockHz int) (chip *Chip) {
 
 		ch.cha = 0xffff
 		ch.chb = 0xffff
+		ch.chl = 0xffff
+		ch.chr = 0xffff
 
 		ch.out = [4]slink{
 			{chip.zero16, nil},
@@ -190,13 +192,98 @@ func (c *Chip) SetChannelCallback(cb ChannelCallback) {
 	c.channelCB = cb
 }
 
-func (c *Chip) Reset(sampleRate int) {
-	*c = *NewChip(sampleRate)
+func (c *Chip) Reset() {
+	c.timer = 0
+
+	c.vibPos = 0
+	c.vibShift = 1
+
+	c.trem = 0
+	c.tremPos = 0
+	c.tremShift = 4
+	c.tremDirty = true
+
+	c.rhythmMode = rhythmMode{}
+
+	c.noise = 1
+	c.noiseHH = 0
+	c.noiseSD = 0
+
+	c.sampleCount = 0
+
+	c.mixes = [2][]*channel{
+		make([]*channel, 0, channelCount),
+		make([]*channel, 0, channelCount),
+	}
+
+	clear(c.samples[:])
+	clear(c.mixes[:])
+
+	c.writeBuf.clear()
+
+	for i := range c.slots {
+		c.slots[i] = slot{
+			Chip: c,
+
+			mod: slink{c.zero16, nil},
+
+			egen: envGenRelease,
+
+			erout: 0x1ff,
+			eout:  0x1ff,
+
+			trem: c.zero8,
+
+			id: uint8(i),
+		}
+	}
+
+	for i := range c.chans {
+		c.chans[i] = channel{
+			Chip: c,
+
+			id:   uint8(i),
+			kind: Chan2op,
+
+			cha: 0xffff,
+			chb: 0xffff,
+			chl: 0xffff,
+			chr: 0xffff,
+
+			out: [4]slink{
+				{c.zero16, nil},
+				{c.zero16, nil},
+				{c.zero16, nil},
+				{c.zero16, nil},
+			},
+		}
+
+		ch := &c.chans[i]
+
+		slotID := chanMapping[i]
+
+		ch.slots[0] = &c.slots[slotID]
+		ch.slots[1] = &c.slots[slotID+3]
+
+		c.slots[slotID].channel = ch
+		c.slots[slotID+3].channel = ch
+
+		switch {
+		case i%9 < 3:
+			ch.pair = &c.chans[i+3]
+		case i%9 < 6:
+			ch.pair = &c.chans[i-3]
+		}
+
+		ch.patchAlgorithm()
+	}
 }
 
-func (c *Chip) ResetWithClock(sampleRate, clockHz int) {
-	*c = *NewChipWithClock(sampleRate, clockHz)
-}
+// func (c *Chip) ResetWithClock(sampleRate, clockHz int) {
+// 	cb := c.channelCB
+// 	*c = *NewChipWithClock(sampleRate, clockHz)
+// 	c.channelCB = cb
+// }
 
 func (c *Chip) Resample4Ch(out []int16) {
 	const (
@@ -251,6 +338,12 @@ func (c *Chip) Stream2Ch(out []int16, size int) {
 }
 
 func (c *Chip) WriteReg(reg16 uint16, data uint8) {
+	if reg16&panReg != 0 {
+		c.writePan(reg16, data)
+
+		return
+	}
+
 	c.writeID++
 
 	if c.writeID == 0 {
@@ -519,23 +612,25 @@ func (c *Chip) updateDrum(data uint8) {
 	}
 
 	ch6 := &c.chans[6]
-
-	ch6.out[0] = linkOut(ch6, 0)
+	ch6.out[0] = linkOut(ch6, 1)
 	ch6.out[1] = linkOut(ch6, 1)
 	ch6.out[2] = link0()
 	ch6.out[3] = link0()
+	ch6.nout = 2
 
 	ch7 := &c.chans[7]
 	ch7.out[0] = linkOut(ch7, 0)
 	ch7.out[1] = linkOut(ch7, 0)
 	ch7.out[2] = linkOut(ch7, 1)
 	ch7.out[3] = linkOut(ch7, 1)
+	ch7.nout = 4
 
 	ch8 := &c.chans[8]
 	ch8.out[0] = linkOut(ch8, 0)
 	ch8.out[1] = linkOut(ch8, 0)
 	ch8.out[2] = linkOut(ch8, 1)
 	ch8.out[3] = linkOut(ch8, 1)
+	ch8.nout = 4
 
 	for i := 6; i < 9; i++ {
 		c.chans[i].kind = ChanDrum
@@ -559,12 +654,12 @@ func (c *Chip) updateDrum(data uint8) {
 	}
 
 	for i := range keys {
-		flag := uint8(1 << (i + 1))
+		flag := uint8(1 << i)
 
 		ch := keys[i].ch
 		slot0, slot1 := keys[i].slot0, keys[i].slot1
 
-		if c.rhy&flag != 0 {
+		if has(c.rhy, flag) {
 			ch.slots[slot0].keyOn(KeyDrum)
 			ch.slots[slot1].keyOn(KeyDrum)
 		} else {
@@ -646,6 +741,15 @@ func (c *Chip) mix(side mixSide) {
 			acc += *chout[i]
 		}
 
+		gain := ch.chr
+		if side == mixLeft {
+			gain = ch.chl
+		}
+
+		if gain != 0xffff {
+			acc = int16(int32(acc) * int32(gain) / 0xffff)
+		}
+
 		sample := func(x int16, mask uint16) int32 {
 			return int32(int16(uint16(x) & mask))
 		}
@@ -674,6 +778,43 @@ func (c *Chip) mix(side mixSide) {
 	// left : 0, 2 right : 1, 3
 	c.mixBuffer[side+0] = mix[0]
 	c.mixBuffer[side+2] = mix[1]
+}
+
+// panReg flags a queued write as a soft-panning write: the low byte is the
+// channel register (0xA0..0xA8) and bit 8 selects the bank.
+const panReg = 1 << 10
+
+// panLaw is the left gain of a pan position, the right one is panLaw[127-pos].
+var panLaw = [128]uint16{
+	65535, 65529, 65514, 65489, 65454, 65409, 65354, 65289,
+	65214, 65129, 65034, 64929, 64814, 64689, 64554, 64410,
+	64255, 64091, 63917, 63733, 63540, 63336, 63123, 62901,
+	62668, 62426, 62175, 61914, 61644, 61364, 61075, 60776,
+	60468, 60151, 59825, 59489, 59145, 58791, 58428, 58057,
+	57676, 57287, 56889, 56482, 56067, 55643, 55211, 54770,
+	54320, 53863, 53397, 52923, 52441, 51951, 51453, 50947,
+	50433, 49912, 49383, 48846, 48302, 47750, 47191, 46340,
+	46340, 45472, 44885, 44291, 43690, 43083, 42469, 41848,
+	41221, 40588, 39948, 39303, 38651, 37994, 37330, 36661,
+	35986, 35306, 34621, 33930, 33234, 32533, 31827, 31116,
+	30400, 29680, 28955, 28225, 27492, 26754, 26012, 25266,
+	24516, 23762, 23005, 22244, 21480, 20713, 19942, 19169,
+	18392, 17613, 16831, 16046, 15259, 14469, 13678, 12884,
+	12088, 11291, 10492, 9691, 8888, 8085, 7280, 6473,
+	5666, 4858, 4050, 3240, 2431, 1620, 810, 0,
+}
+
+// writePan sets the soft-panning gains of a channel, a non-hardware extension.
+func (c *Chip) writePan(reg16 uint16, pos uint8) {
+	i := 9*int(bit(8, reg16)) + int(reg16&0xf)
+	if i >= len(c.chans) {
+		return
+	}
+
+	pos &= 0x7f
+
+	c.chans[i].chl = panLaw[pos]
+	c.chans[i].chr = panLaw[0x7f-pos]
 }
 
 type envelopeTimer struct {
