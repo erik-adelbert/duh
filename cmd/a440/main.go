@@ -253,7 +253,7 @@ func parseFlags() flags {
 	flag.Var(&end, "end", "Sweep end frequency")
 	flag.Var(&fq, "hz", "Signal frequency: 1000mHz, 1Hz, 2kHz, ...")
 
-	sigs := slices.Collect(maps.Keys(sigs))
+	sigs := slices.Sorted(maps.Keys(sigs))
 
 	fs := flags{
 		pcm: flag.Bool("pcm", false, "output raw PCM on stdout"),
