@@ -116,7 +116,7 @@ func NewSpectrum(bands []Band, overlap float64, size int) (sp *Spectrum, err err
 
 	// Create a windowed buffer with double the size to accommodate overlapping windows.
 	// sz = 2048, win = 1024, hop = 512
-	wbuf, err = newbuf[complex128](2*size, size, hop)
+	wbuf, err = newWinBuffer[complex128](2*size, size, hop)
 
 	if err != nil {
 		err = mkError(ErrNew, err)
@@ -174,7 +174,7 @@ func (sp *Spectrum) Addf64(sample float64) {
 	sp.buf.write(complex(sample, 0))
 
 	if sp.buf.available() >= sp.TinyFFT.Size() {
-		_, err := sp.buf.readWindow(sp.win)
+		_, err := sp.buf.window(sp.win)
 
 		if err != nil {
 			fmt.Printf("readWindow error: %v (avail: %d, needed: %d)\n",

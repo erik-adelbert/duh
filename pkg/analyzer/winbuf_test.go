@@ -20,7 +20,7 @@ func TestWinBufferReadWindowWraps(t *testing.T) {
 	}
 
 	out := make([]int, wb.winsz)
-	n, err := wb.readWindow(out)
+	n, err := wb.window(out)
 
 	if err != nil {
 		t.Fatalf("ReadWindow error: %v", err)
@@ -39,14 +39,14 @@ func TestWinBufferReadWindowWraps(t *testing.T) {
 }
 
 func TestWinBufferAvailableAfterRead(t *testing.T) {
-	wb, err := newbuf[int](8, 4, 2)
+	wb, err := newWinBuffer[int](8, 4, 2)
 	if err != nil {
 		t.Fatalf("NewWinBuffer error: %v", err)
 	}
 
 	wb.write(0, 1, 2, 3)
 	out := make([]int, 4)
-	if _, err := wb.readWindow(out); err != nil {
+	if _, err := wb.window(out); err != nil {
 		t.Fatalf("ReadWindow error: %v", err)
 	}
 
@@ -60,7 +60,7 @@ func TestWinBufferAvailableAfterRead(t *testing.T) {
 		t.Fatalf("Available after two writes = %d, want 4", got)
 	}
 
-	if _, err := wb.readWindow(out); err != nil {
+	if _, err := wb.window(out); err != nil {
 		t.Fatalf("ReadWindow error: %v", err)
 	}
 	if got := wb.available(); got != 2 {

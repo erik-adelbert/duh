@@ -23,7 +23,7 @@ type wbuf[T any] struct {
 	filled  int
 }
 
-func newbuf[T any](cap, winSize, hopSize int) (wb *wbuf[T], err error) {
+func newWinBuffer[T any](cap, winSize, hopSize int) (wb *wbuf[T], err error) {
 	if winSize > cap {
 		err = mkError(ErrNew, "window size cannot be larger than buffer capacity")
 		return
@@ -68,7 +68,7 @@ func (r *wbuf[T]) write(values ...T) int {
 	return nwrite
 }
 
-func (r *wbuf[T]) readWindow(p []T) (n int, err error) {
+func (r *wbuf[T]) window(p []T) (n int, err error) {
 	if r.pending < r.winsz {
 		// Not enough data available to read a full window.
 		return
@@ -114,4 +114,12 @@ func (r *wbuf[T]) readWindow(p []T) (n int, err error) {
 
 func (r *wbuf[T]) available() int {
 	return r.pending
+}
+
+func (r *wbuf[T]) reset() {
+	r.wpos = 0
+	r.wcnt = 0
+	r.rpos = 0
+	r.pending = 0
+	r.filled = 0
 }
