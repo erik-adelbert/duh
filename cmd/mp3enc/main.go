@@ -42,6 +42,9 @@ func main() {
 	_, err = io.Copy(out, in)
 	die(err, "Failed to copy MP3 data", 1)
 
+	err = out.Close()
+	die(err, "Failed to finalize MP3 data", 1)
+
 	err = a.out.Close()
 	die(err, "Failed to close output", 1)
 }
