@@ -1,0 +1,155 @@
+package model
+
+import "math"
+
+type OConnel struct{}
+
+func (o *OConnel) Freq(tone float64, offset *uint32) uint16 {
+	const prange = 2
+
+	*offset = 0
+
+	note := int(math.Trunc(tone))
+	half := tone - float64(note)
+
+	if half > 0.5 {
+		note += 1
+		half -= 1.0
+	}
+
+	pitch := int(half*4096) + 8192
+
+	oct := note / 12
+
+	for oct > 7 {
+		*offset++
+		oct--
+	}
+
+	if oct > 0 {
+		oct-- // Drop Octave (FM Chip uses 48 as MID C)
+	}
+
+	freq := oconnelFreqs[note%12]
+
+	if pitch > 0x2000 {
+		p := pitch - 0x2000
+		i := (note + prange) % 12
+		nf := oconnelFreqs[i]
+
+		if nf <= freq {
+			nf <<= 1
+		}
+
+		delta := (nf - freq) * p
+
+		nf = (delta >> 13) + freq
+		for nf > 0x3FF {
+			if oct < 7 {
+				oct++
+			} else {
+				*offset++
+			}
+
+			nf >>= 1
+		}
+
+		freq = nf
+	} else {
+		var i int
+
+		if note > prange {
+			i = (note - prange) % 12
+		}
+
+		nf := oconnelFreqs[i]
+
+		p := 0x2000 - pitch
+
+		if nf >= freq {
+			nf >>= 1
+		}
+
+		delta := (freq - nf) * p
+
+		nf = freq - (delta >> 13)
+		for nf < oconnelFreqs[0] {
+			if oct > 0 {
+				oct--
+				nf <<= 1
+			} else {
+				nf = oconnelFreqs[0]
+			}
+		}
+
+		freq = nf
+	}
+
+	return uint16(oct<<10 | freq)
+}
+
+func (o *OConnel) Volume(volume *OPLModel) {
+	vel := volume.Get(OPLVelocity)
+	exp := volume.Get(OPLChanExpression)
+	vol := volume.Get(OPLChanVolume)
+	mv := volume.Get(OPLMasterVolume)
+
+	v := oconnelVels[vel] * oconnelVels[vol] * oconnelVels[exp] * oconnelVels[mv]
+
+	if volume.IsDrum() {
+		v >>= 19
+		v += 2
+	} else {
+		v >>= 18
+		v += 3 /* Maximum result is 60, so, compensate that! */
+	}
+
+	set := func(f OPLField) {
+		const boost = 32
+
+		fv := volume.Get(f)
+
+		v := v * (63 - fv)
+		v >>= 6
+
+		if volume.IsDrum() {
+			v += boost
+		}
+
+		v = min(v, 63)
+
+		volume.Set(f, 63-v)
+	}
+
+	if volume.IsMod() {
+		set(OPLModN)
+	}
+
+	if volume.IsCar() {
+		set(OPLCarN)
+	}
+}
+
+var oconnelFreqs = [...]int{
+	0x158, 0x16D, 0x183, 0x19A, 0x1B2, 0x1CC, 0x1E7,
+	0x204, 0x223, 0x244, 0x266, 0x28A,
+}
+
+var oconnelVels = [...]int{
+	0x00, 0x08, 0x0A, 0x0F, 0x13, 0x16, 0x18, 0x1A,
+	0x1C, 0x1D, 0x1E, 0x20, 0x21, 0x22, 0x23, 0x24,
+	0x24, 0x25, 0x26, 0x27, 0x27, 0x28, 0x28, 0x29,
+	0x2A, 0x2A, 0x2B, 0x2B, 0x2C, 0x2C, 0x2C, 0x2D,
+	0x2D, 0x2E, 0x2E, 0x2E, 0x2F, 0x2F, 0x2F, 0x30,
+	0x30, 0x30, 0x31, 0x31, 0x31, 0x32, 0x32, 0x32,
+	0x32, 0x33, 0x33, 0x33, 0x33, 0x34, 0x34, 0x34,
+	0x34, 0x35, 0x35, 0x35, 0x35, 0x36, 0x36, 0x36,
+	0x36, 0x36, 0x37, 0x37, 0x37, 0x37, 0x37, 0x37,
+	0x38, 0x38, 0x38, 0x38, 0x38, 0x39, 0x39, 0x39,
+	0x39, 0x39, 0x39, 0x39, 0x3A, 0x3A, 0x3A, 0x3A,
+	0x3A, 0x3A, 0x3A, 0x3B, 0x3B, 0x3B, 0x3B, 0x3B,
+	0x3B, 0x3B, 0x3C, 0x3C, 0x3C, 0x3C, 0x3C, 0x3C,
+	0x3C, 0x3C, 0x3D, 0x3D, 0x3D, 0x3D, 0x3D, 0x3D,
+	0x3D, 0x3D, 0x3E, 0x3E, 0x3E, 0x3E, 0x3E, 0x3E,
+	0x3E, 0x3E, 0x3E, 0x3E, 0x3F, 0x3F, 0x3F, 0x3F,
+}
