@@ -176,11 +176,11 @@ func TestBuiltinADLDatabaseLoads(t *testing.T) {
 
 func TestBuiltinGENMIDIPseudoFourOp(t *testing.T) {
 	for _, bank := range banks {
-		if bank.name != "WOPL (GENMIDI)" {
+		if bank.name != "WOPL (DMXOPL3 GM)" {
 			continue
 		}
-		if bank.Setup != VolLinear {
-			t.Errorf("GENMIDI setup = %#x, want generic volume and shallow modulation", bank.Setup)
+		if bank.Setup != VolNative {
+			t.Errorf("GENMIDI setup = %#x, want native volume and shallow modulation", bank.Setup)
 		}
 		if len(bank.Melos) == 0 {
 			t.Fatal("GENMIDI has no melodic bank")

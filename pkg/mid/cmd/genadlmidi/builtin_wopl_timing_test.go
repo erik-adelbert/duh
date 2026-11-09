@@ -54,7 +54,7 @@ func TestBuiltinGENMIDITimingsMatchWOPL(t *testing.T) {
 	}
 	var selected *mid.BankEntry
 	for _, bank := range db.Banks {
-		if bank.Name == "WOPL (GENMIDI)" {
+		if bank.Name == "WOPL (DMXOPL3 GM)" {
 			selected = bank
 			break
 		}
