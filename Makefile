@@ -11,7 +11,7 @@ endif
 
 # Auto-discover all command directories under ./cmd
 # BINARIES := $(notdir $(wildcard cmd/*))
-BINARIES := $(filter-out vgmweb,$(notdir $(wildcard cmd/*)))
+BINARIES := $(filter-out midweb vgmweb,$(notdir $(wildcard cmd/*)))
 
 # If BINARY is set, only build that one; otherwise build all
 ifdef BINARY
@@ -41,6 +41,11 @@ build: utm
 vgmweb:
 	GOOS=js GOARCH=wasm go build -o docs/vgmweb/vgmweb.wasm ./cmd/vgmweb
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" docs/vgmweb/wasm_exec.js
+
+midweb:
+	mkdir -p docs/midweb
+	GOOS=js GOARCH=wasm go build -o docs/midweb/midweb.wasm ./cmd/midweb
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" docs/midweb/wasm_exec.js
 
 # Show what would be built
 list:

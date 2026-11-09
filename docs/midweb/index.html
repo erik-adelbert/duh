@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <title>duh midweb</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css">
+  <script src="wasm_exec.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.19.0/lib/addon-webgl.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      font-family: monospace;
+    }
+
+    #controls {
+      margin: 30px;
+    }
+
+    #buttons {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    #bank-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #bank {
+      width: 42ch;
+      height: 28px;
+      box-sizing: border-box;
+    }
+
+    button {
+      height: 28px;
+      width: 120px;
+      padding: 4px 12px;
+      box-sizing: border-box;
+    }
+    button:disabled, select:disabled { opacity: .45; }
+
+    #info {
+      margin-top: 6px;
+      color: #ccc;
+      white-space: pre-line;
+    }
+
+    #terminal {
+      margin: 10px;
+      width: min(84ch, calc(100vw - 20px));
+      height: 1400px;
+      border: 0;
+    }
+
+    .xterm { height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <div id="buttons">
+      <input id="midi-file" type="file" accept=".mid,.midi,audio/midi,audio/x-midi" hidden>
+      <button id="choose" type="button">Choose MIDI</button>
+      <label id="bank-control" for="bank">Bank
+        <select id="bank" disabled></select>
+      </label>
+      <button id="play" type="button" disabled>Play</button>
+    </div>
+    <div id="info"><span id="status">Choose a MIDI file and instrument bank.</span><br><span id="file-name">No file selected</span><span> / PCM 49.716 kHz stereo</span></div>
+  </div>
+
+  <div id="terminal" aria-label="Spectrogram and stereo VU meters"></div>
+
+  <script>
+    const SOURCE_RATE = 49716;
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    const fileInput = document.getElementById("midi-file");
+    const chooseButton = document.getElementById("choose");
+    const bankSelect = document.getElementById("bank");
+    const playButton = document.getElementById("play");
+    const status = document.getElementById("status");
+    const fileName = document.getElementById("file-name");
+    let selectedFile = null;
+    let audioContext = null;
+    let audioNode = null;
+    let audioReady = null;
+    let wasmReady = false;
+    let playing = false;
+    let playbackError = false;
+
+    const term = new Terminal({
+      cols: 84,
+      rows: 50,
+      cursorBlink: false,
+      convertEol: true,
+      scrollback: 0,
+      fontFamily: '"JetBrains Mono", "DejaVu Sans Mono", monospace',
+      fontSize: 13,
+      lineHeight: 1.1,
+      theme: {
+        background: "#000000",
+        foreground: "#dddddd",
+        cursor: "#dddddd"
+      }
+    });
+    term.open(document.getElementById("terminal"));
+    try { term.loadAddon(new WebglAddon.WebglAddon()); } catch {}
+
+    globalThis.terminalColumns = () => Math.max(
+      40,
+      Math.min(84, Math.floor((document.getElementById("terminal").clientWidth - 24) / 8))
+    );
+    function fitTerminal() {
+      term.resize(globalThis.terminalColumns(), 50);
+    }
+    fitTerminal();
+    window.addEventListener("resize", fitTerminal);
+
+    function updateReady() {
+      const ready = wasmReady && selectedFile !== null && !playing;
+      playButton.disabled = !ready;
+      bankSelect.disabled = !wasmReady || playing;
+      fileInput.disabled = playing;
+      chooseButton.disabled = playing;
+    }
+
+    function setStatus(text, state) {
+      status.textContent = text;
+      status.dataset.state = state;
+    }
+
+    globalThis.populateBanks = names => {
+      bankSelect.replaceChildren();
+      names.forEach((name, index) => {
+        const option = document.createElement("option");
+        option.value = String(index);
+        option.textContent = `${String(index).padStart(2, "0")} · ${name}`;
+        bankSelect.append(option);
+      });
+      if (names.length > 79) bankSelect.value = "79";
+      wasmReady = true;
+      setStatus(selectedFile ? "Ready" : "Choose a file", "ready");
+      updateReady();
+    };
+
+    async function initAudio() {
+      if (audioReady) return audioReady;
+      audioReady = (async () => {
+        audioContext = new AudioContext();
+        await audioContext.audioWorklet.addModule("pcm-worklet.js");
+        audioNode = new AudioWorkletNode(audioContext, "mid-pcm-player", {
+          numberOfInputs: 0,
+          numberOfOutputs: 1,
+          outputChannelCount: [2],
+          processorOptions: { sourceRate: SOURCE_RATE }
+        });
+        audioNode.connect(audioContext.destination);
+        await audioContext.resume();
+      })();
+      return audioReady;
+    }
+
+    globalThis.writeAudio = bytes => {
+      if (audioNode) audioNode.port.postMessage(bytes, [bytes.buffer]);
+    };
+
+    globalThis.renderScreen = screen => term.write(screen);
+    globalThis.playbackStarted = () => setStatus("Playing", "playing");
+    globalThis.renderError = error => {
+      playbackError = true;
+      console.error(error);
+      term.write(`\r\n\x1b[31m${String(error)}\x1b[0m\r\n`);
+      setStatus("Playback error", "error");
+    };
+    globalThis.playbackEnded = () => {
+      playing = false;
+      if (wasmReady && !playbackError) setStatus(selectedFile ? "Ready" : "Choose a file", "ready");
+      updateReady();
+    };
+
+    fileInput.addEventListener("change", () => {
+      selectedFile = fileInput.files?.[0] ?? null;
+      playbackError = false;
+      fileName.textContent = selectedFile ? selectedFile.name : "No file selected";
+      setStatus(selectedFile ? "File loaded" : "Choose a file", selectedFile ? "ready" : "loading");
+      updateReady();
+    });
+
+    chooseButton.addEventListener("click", () => {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener("cancel", () => {
+      chooseButton.disabled = false;
+    });
+
+    playButton.addEventListener("click", async () => {
+      if (!selectedFile || !wasmReady || playing) return;
+      if (selectedFile.size > MAX_FILE_SIZE) {
+        globalThis.renderError("MIDI files must be 10 MiB or smaller.");
+        return;
+      }
+
+      playing = true;
+      playbackError = false;
+      updateReady();
+      setStatus("Preparing audio", "playing");
+      try {
+        await initAudio();
+        term.clear();
+        const data = new Uint8Array(await selectedFile.arrayBuffer());
+        document.title = `${selectedFile.name} · duh midweb`;
+        setStatus("Synthesizing", "playing");
+        globalThis.run(data, Number(bankSelect.value));
+      } catch (error) {
+        globalThis.renderError(error);
+        globalThis.playbackEnded();
+      }
+    });
+
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("midweb.wasm"), go.importObject)
+      .then(({ instance }) => go.run(instance))
+      .catch(error => {
+        globalThis.renderError(`Failed to load WASM: ${error}`);
+        setStatus("WASM unavailable", "error");
+      });
+  </script>
+</body>
+</html>
