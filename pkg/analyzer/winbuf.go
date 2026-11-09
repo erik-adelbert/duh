@@ -116,10 +116,10 @@ func (r *wbuf[T]) available() int {
 	return r.pending
 }
 
-func (r *wbuf[T]) reset() {
-	r.wpos = 0
-	r.wcnt = 0
-	r.rpos = 0
-	r.pending = 0
-	r.filled = 0
-}
+// func (r *wbuf[T]) reset() {
+// 	r.wpos = 0
+// 	r.wcnt = 0
+// 	r.rpos = 0
+// 	r.pending = 0
+// 	r.filled = 0
+// }

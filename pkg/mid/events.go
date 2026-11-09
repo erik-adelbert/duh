@@ -159,12 +159,12 @@ func (s *Synth) playbackNoteOn(midCh uint32, note, velocity uint8) bool {
 		phys:      make(map[int]uint16),
 	}
 
-	if ch.portamento.enabled && !math.IsInf(ch.portamento.rate, 1) &&
-		!ch.IsDrum(midCh) && ch.portamento.src >= 0 {
-		info.glide = float64(ch.portamento.src)
-		info.glideRate = ch.portamento.rate
+	if ch.enabled && !math.IsInf(ch.rate, 1) &&
+		!ch.IsDrum(midCh) && ch.src >= 0 {
+		info.glide = float64(ch.src)
+		info.glideRate = ch.rate
 	}
-	ch.portamento.src = int8(note)
+	ch.src = int8(note)
 
 	for voice, adlCh := range achans {
 		if adlCh >= 0 {
@@ -250,7 +250,7 @@ func (s *Synth) Controller(midCh uint32, ctrl, value uint8) {
 	case 67: // Soft pedal
 		ch.isSoft = value >= 64
 	case 65: // Portamento enable/disable
-		ch.portamento.enabled = value >= 64
+		ch.enabled = value >= 64
 		s.UpdatePortamento(midCh)
 	case 74: // Brightness
 		ch.bright = value
@@ -304,7 +304,7 @@ func (s *Synth) ChannelPressure(midCh uint32, pressure uint8) {
 // decoder channel index.
 func (s *Synth) PitchBend(midCh uint32, value uint16) {
 	ch := &s.mchans[midCh]
-	ch.pitch.bend = float64(value) - 8192
+	ch.bend = float64(value) - 8192
 	s.NoteUpdateAll(midCh, UpdPitch)
 }
 

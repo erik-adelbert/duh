@@ -113,7 +113,7 @@ type noteInfo struct {
 
 	// InsMidi uint8
 	// InsMeta uint16
-	kind noteType
+	// kind noteType
 
 	phys
 
@@ -150,7 +150,7 @@ func (c *midiChan) Reset() {
 // ResetControllers is the CC121 subset of Reset: volume, brightness and
 // panning are left alone.
 func (c *midiChan) ResetControllers() {
-	c.pitch.bend = 0
+	c.bend = 0
 
 	c.pitch.MSB, c.pitch.LSB = int(c.pitch0), 0
 

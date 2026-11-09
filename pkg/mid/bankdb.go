@@ -61,7 +61,7 @@ func (db *BankDB) Dump(output string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	var buf bytes.Buffer
 
@@ -81,7 +81,7 @@ func OpenDB(input string) (*BankDB, error) {
 		return nil, err
 	}
 
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	dec := gob.NewDecoder(f)
 

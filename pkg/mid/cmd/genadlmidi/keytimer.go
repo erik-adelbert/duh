@@ -159,7 +159,7 @@ func (kt *KeyTimer) loadcache(cache string) error {
 		return err
 	}
 
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var buf [32]byte
 
@@ -225,7 +225,7 @@ func (kt *KeyTimer) DumpCache(cache string) error {
 		return err
 	}
 
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	_, err = f.Write([]byte(cacheMagic))
 

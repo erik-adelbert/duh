@@ -156,7 +156,7 @@ func (d *Decoder) reset(loop bool) error {
 	p.DeviceSelect("")
 	p.SetNoLooping(!loop)
 
-	if err := p.Sequencer.openReader(bytes.NewReader(d.data)); err != nil {
+	if err := p.openReader(bytes.NewReader(d.data)); err != nil {
 		return err
 	}
 
@@ -193,7 +193,7 @@ func (d *Decoder) nextFrames() (int, error) {
 	}
 	n := min(d.tail, decoderChunkFrames)
 	d.tail -= n
-	d.player.Synth.Advance(d.lastDT)
+	d.player.Advance(d.lastDT)
 	d.setElapsed(n)
 	return n, nil
 }

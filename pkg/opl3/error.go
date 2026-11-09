@@ -37,7 +37,6 @@ var (
 var (
 	errWriteAddress = errors.New("write address error")
 	errWriteData    = errors.New("write data error")
-	errSampleRate   = errors.New("sample rate error")
 )
 
 var mkError = errp.MkError

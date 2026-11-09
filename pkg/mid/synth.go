@@ -108,7 +108,7 @@ func newSynth(cardCount, quadOpsCount, flags int, bank uint32) *Synth {
 	}
 	s.SetVolumeModel(0)
 	s.applyBankMode()
-	s.initADLChannels()
+	_ = s.initADLChannels()
 	return s
 }
 
@@ -305,7 +305,7 @@ func (s *Synth) NoteUpdate(midCh uint32, note uint8, propsMask uint32, ADLChan i
 
 	vol := info.vol
 
-	meta := info.instrument.Meta
+	meta := info.Meta
 	ains := s.GetAdlMeta(meta)
 	if has(propsMask, UpdVolume) {
 		vol = uint8(max(0, min(127, int(vol)+int(ains.VelocityOffset))))
@@ -390,7 +390,7 @@ func (s *Synth) NoteUpdate(midCh uint32, note uint8, propsMask uint32, ADLChan i
 			d := s.achans[ch].users[loc]
 
 			if d.sustained == HoldNone {
-				pitch := s.mchans[midCh].pitch.Value() + float64(s.GetAdlIns(ins).Finetune)
+				pitch := s.mchans[midCh].Value() + float64(s.GetAdlIns(ins).Finetune)
 
 				if IsPseudo4Op(ains.Flags) && ins == ains.ID1 {
 					pitch += ains.SecondFinetune
@@ -432,7 +432,7 @@ func (m *Synth) ChannelScore(c0, ins, midCh uint32) int64 {
 				s += 300
 			}
 
-			s += 50 * int64(info.instrument.Midi/128)
+			s += 50 * int64(info.Midi/128)
 
 			var nevac int64
 
@@ -594,24 +594,24 @@ func (s *Synth) SetRPN(midCh, value uint32, msb bool) {
 		ch.pitch.MSB = int(value)
 	case 0x0108 + 1*0x10000 + 1*0x20000: // Vibrato speed
 		if value == 64 {
-			ch.vibrato.vel = 1.0
+			ch.vel = 1.0
 		} else if value < 100 {
 			v := value
 			if v == 0 {
 				v = 1
 			}
-			ch.vibrato.vel = 1.0 / (1.6e-2 * float64(v))
+			ch.vel = 1.0 / (1.6e-2 * float64(v))
 		} else {
-			ch.vibrato.vel = 1.0 / (0.051153846*float64(value) - 3.4965385)
+			ch.vel = 1.0 / (0.051153846*float64(value) - 3.4965385)
 		}
-		ch.vibrato.vel *= 2 * math.Pi * 5.0
+		ch.vel *= 2 * math.Pi * 5.0
 	case 0x0109 + 1*0x10000 + 1*0x20000: // Vibrato depth
-		ch.vibrato.depth = (float64(value) - 64) * 0.15 * 0.01
+		ch.depth = (float64(value) - 64) * 0.15 * 0.01
 	case 0x010A + 1*0x10000 + 1*0x20000: // Vibrato delay
 		if value != 0 {
-			ch.vibrato.delay = time.Duration(0.2092 * math.Exp(0.0795*float64(value)) * float64(time.Second))
+			ch.delay = time.Duration(0.2092 * math.Exp(0.0795*float64(value)) * float64(time.Second))
 		} else {
-			ch.vibrato.delay = 0
+			ch.delay = 0
 		}
 	}
 }
@@ -677,9 +677,9 @@ func (s *Synth) UpdateVibrato(amount time.Duration) {
 
 		if ch.HasVibrato() && len(ch.activeNotes) > 0 {
 			s.NoteUpdateAll(uint32(a), UpdPitch)
-			ch.vibrato.pos += sec * ch.vibrato.vel
+			ch.pos += sec * ch.vel
 		} else {
-			ch.vibrato.pos = 0.0
+			ch.pos = 0.0
 		}
 	}
 }

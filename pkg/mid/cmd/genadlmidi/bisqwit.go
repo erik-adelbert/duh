@@ -40,7 +40,7 @@ func LoadBisqwit(banks *mid.BankDB, id int, bi BankInfo) error {
 		return err
 	}
 
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	bf := bufio.NewReader(f)
 
 	melo := mid.NewMidiBank(0, 0)

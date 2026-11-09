@@ -158,7 +158,7 @@ func (s *Sequencer) ReadDelay(tk int) int64 {
 		var ev [2]byte
 
 		n, _ := io.ReadFull(tr.Reader, ev[:])
-		tr.Seek(-int64(n), io.SeekCurrent)
+		_, _ = tr.Seek(-int64(n), io.SeekCurrent)
 
 		if ev == [2]byte{0xFF, 0x2F} {
 			return 0
@@ -198,8 +198,6 @@ func unwrapRIFF(r io.ReadSeeker) error {
 //   - chunk padding to even boundaries
 //   - arbitrary number of sibling chunks
 func reskip(r io.ReadSeeker) error {
-	const chunkHdrSz = 8 // id + size
-
 	var hdr [12]byte
 
 	if _, err := io.ReadFull(r, hdr[:]); err != nil {
@@ -257,7 +255,7 @@ func (s *Sequencer) Open(filename string) (err error) {
 	if err != nil {
 		return mkError(ErrMidi, err)
 	}
-	defer fd.Close()
+	defer func() { _ = fd.Close() }()
 
 	return s.openReader(fd)
 }
@@ -575,7 +573,7 @@ func (s *Sequencer) metaCMF(fp io.ReadSeeker, hdr []byte) (midinfo, error) {
 
 	ntick := u16(hdr[12:])
 
-	fp.Seek(22, io.SeekCurrent) // Skip channels-in-use table
+	_, _ = fp.Seek(22, io.SeekCurrent) // Skip channels-in-use table
 
 	var raw [4]byte
 
@@ -585,7 +583,7 @@ func (s *Sequencer) metaCMF(fp io.ReadSeeker, hdr []byte) (midinfo, error) {
 
 	nins := u16(raw[:2])
 
-	fp.Seek(ioff, io.SeekStart)
+	_, _ = fp.Seek(ioff, io.SeekStart)
 	for range nins {
 		var dat [16]byte
 
@@ -608,7 +606,7 @@ func (s *Sequencer) metaCMF(fp io.ReadSeeker, hdr []byte) (midinfo, error) {
 		s.synth.addCMFInstrument(adl)
 	}
 
-	fp.Seek(moff, io.SeekStart)
+	_, _ = fp.Seek(moff, io.SeekStart)
 
 	s.synth.useCMFBank()
 
@@ -629,7 +627,7 @@ func (s *Sequencer) metaIMF(fp io.ReadSeeker, hdr []byte) (midinfo, error) {
 
 		off0, _ := fp.Seek(0, io.SeekCurrent)
 
-		fp.Seek(2, io.SeekStart)
+		_, _ = fp.Seek(2, io.SeekStart)
 
 		b1 := make([]byte, 2)
 		b2 := make([]byte, 2)
@@ -650,7 +648,7 @@ func (s *Sequencer) metaIMF(fp io.ReadSeeker, hdr []byte) (midinfo, error) {
 			sum2 += v2
 		}
 
-		fp.Seek(off0, io.SeekStart)
+		_, _ = fp.Seek(off0, io.SeekStart)
 	}
 
 	end = int64(hdr[0]) + 256*int64(hdr[1])
@@ -670,16 +668,16 @@ func (s *Sequencer) detectFormat(fp io.ReadSeeker, hdr []byte) Format {
 
 	switch string(hdr[:4]) {
 	case "GMF\x01":
-		fp.Seek(7-hdrsz, io.SeekCurrent)
+		_, _ = fp.Seek(7-hdrsz, io.SeekCurrent)
 
 		return FormatGMF
 	case "MUS\x1A":
 		start := int64(u16(hdr[8:]))
-		fp.Seek(start-hdrsz, 1)
+		_, _ = fp.Seek(start-hdrsz, 1)
 
 		return FormatMUS
 	case "CTMF":
-		fp.Seek(22, io.SeekCurrent) // Skip unused bytes
+		_, _ = fp.Seek(22, io.SeekCurrent) // Skip unused bytes
 
 		return FormatCMF
 	default:
@@ -691,20 +689,20 @@ func (s *Sequencer) detectFormat(fp io.ReadSeeker, hdr []byte) Format {
 
 		off0, _ := fp.Seek(0, io.SeekCurrent)
 
-		fp.Seek(int64(hdr[0])-0x10, io.SeekStart)
+		_, _ = fp.Seek(int64(hdr[0])-0x10, io.SeekStart)
 
 		if _, err := io.ReadFull(fp, rsxx[:]); err != nil {
-			fp.Seek(off0, io.SeekStart)
+			_, _ = fp.Seek(off0, io.SeekStart)
 			return FormatBAD
 		}
 
 		switch string(rsxx[:4]) {
 		case "rsxx":
-			fp.Seek(int64(hdr[0]), io.SeekStart)
+			_, _ = fp.Seek(int64(hdr[0]), io.SeekStart)
 			return FormatRSX
 		default:
 			// Not RSX: the probe moved the cursor, put it back after the header.
-			fp.Seek(off0, io.SeekStart)
+			_, _ = fp.Seek(off0, io.SeekStart)
 		}
 
 		// Check for IMF format as a fallback
@@ -717,9 +715,9 @@ func (s *Sequencer) detectFormat(fp io.ReadSeeker, hdr []byte) Format {
 			)
 
 			off0, _ = fp.Seek(0, io.SeekCurrent)
-			defer fp.Seek(off0, io.SeekStart)
+			defer func() { _, _ = fp.Seek(off0, io.SeekStart) }()
 
-			fp.Seek(2, io.SeekStart)
+			_, _ = fp.Seek(2, io.SeekStart)
 
 			for range 42 {
 				if _, err := io.ReadFull(fp, buf[:]); err != nil {
@@ -893,7 +891,7 @@ func (s *Sequencer) HandleEvent(trackID uint32) {
 		if off+int64(length) > tracklen {
 			// Truncated / corrupt event — bail out safely.
 			tr.status = -1
-			tr.Seek(tracklen, io.SeekStart)
+			_, _ = tr.Seek(tracklen, io.SeekStart)
 
 			return
 		}
@@ -916,13 +914,13 @@ func (s *Sequencer) HandleEvent(trackID uint32) {
 		if off+int64(metasz) > tracklen {
 			// Truncated / corrupt event — bail out safely.
 			tr.status = -1
-			tr.Seek(tracklen, io.SeekStart)
+			_, _ = tr.Seek(tracklen, io.SeekStart)
 
 			return
 		}
 
 		meta := s.tracks[trackID][off : off+int64(metasz)]
-		tr.Seek(int64(metasz), io.SeekCurrent)
+		_, _ = tr.Seek(int64(metasz), io.SeekCurrent)
 
 		switch metatype {
 		case 0x2F: // End of track
@@ -955,7 +953,7 @@ func (s *Sequencer) HandleEvent(trackID uint32) {
 	// Running status
 	if x < 0x80 {
 		x = uint8(tr.status | 0x80)
-		tr.UnreadByte()
+		_ = tr.UnreadByte()
 	}
 
 	switch x {

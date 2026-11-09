@@ -208,7 +208,7 @@ func TestDecoderRejectsInvalidInputAndNormalizesOptions(t *testing.T) {
 		if d.opts != tt.want {
 			t.Errorf("Decode(%+v) normalized options to %+v, want %+v", tt.options, d.opts, tt.want)
 		}
-		d.Close()
+		_ = d.Close()
 	}
 }
 

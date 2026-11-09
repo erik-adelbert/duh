@@ -64,7 +64,7 @@ func (w *Encoder) Write(p []byte) (n int, err error) {
 		w.input = in
 	}
 
-	framesz := int(w.Format.FrameSize())
+	framesz := int(w.FrameSize())
 	alignedsz := len(in) / framesz * framesz
 
 	w.pending.bytes = append(w.pending.bytes[:0], in[alignedsz:]...)
@@ -84,7 +84,7 @@ func (w *Encoder) encode() error {
 	nused := 0
 
 	for len(w.pending.samples)-nused >= spf {
-		data, n := w.Encoder.EncodeBufferInterleaved(
+		data, n := w.EncodeBufferInterleaved(
 			w.pending.samples[nused : nused+spf],
 		)
 

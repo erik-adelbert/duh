@@ -40,8 +40,8 @@ func NewMIDIPlayer(cardCount, quadOpsCount, flags int) *MIDIPlayer {
 
 // NoteOn starts a note and marks playback active if a voice was allocated.
 func (m *MIDIPlayer) NoteOn(channel uint32, note, velocity uint8) {
-	if m.Synth.playbackNoteOn(channel, note, velocity) {
-		m.Sequencer.pos.cur.isPlaying = true
+	if m.playbackNoteOn(channel, note, velocity) {
+		m.pos.cur.isPlaying = true
 	}
 }
 
@@ -50,7 +50,7 @@ func (m *MIDIPlayer) Tick(dt time.Duration) time.Duration {
 	wasPlaying := m.pos.cur.isPlaying
 	wait := m.Sequencer.Tick(dt)
 	if wasPlaying {
-		m.Synth.Advance(dt)
+		m.Advance(dt)
 	}
 	return wait
 }

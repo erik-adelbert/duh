@@ -71,7 +71,7 @@ func (cfg *Config) Open(path string) error {
 		return err
 	}
 
-	nbank := cfg.General.BankCount
+	nbank := cfg.BankCount
 
 	if nbank == 0 {
 		return fmt.Errorf("no bank found")

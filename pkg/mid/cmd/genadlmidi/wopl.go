@@ -641,9 +641,9 @@ func WriteInstrument(ins *WOPLIns, data []byte, version uint16, hasSoundingDelay
 	}
 }
 
-type BankID struct {
-	msb, lsb uint8
-}
+// type BankID struct {
+// 	_, _ uint8
+// }
 
 func LoadWOPL(banks *mid.BankDB, id int, bi BankInfo) error {
 	fn := bi.FileM

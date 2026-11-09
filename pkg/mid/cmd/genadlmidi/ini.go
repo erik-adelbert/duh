@@ -37,7 +37,7 @@ func convert(ini, conf string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	var (
 		section string

@@ -43,7 +43,7 @@ func main() {
 
 	midi, err := mid.Decode(a.input, a.opts)
 	die(err, "Failed to decode MIDI file", 2)
-	defer midi.Close()
+	defer func() { _ = midi.Close() }()
 
 	if _, err := io.Copy(os.Stdout, midi); err != nil {
 		die(err, "Failed to copy decoded audio", 1)
@@ -129,7 +129,7 @@ func getArgs() args {
 		synthFlags |= mid.ModeSoftPanning
 	}
 
-	var input io.ReadCloser = io.NopCloser(os.Stdin)
+	var input = io.NopCloser(os.Stdin)
 	if path != "-" {
 		file, err := os.Open(path)
 		die(err, "Failed to open MIDI file", 1)

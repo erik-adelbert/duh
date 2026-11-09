@@ -210,7 +210,7 @@ func parseBank(path string) (*xbank, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	bank := new(xbank{
 		hdr: map[string]string{},

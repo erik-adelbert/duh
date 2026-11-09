@@ -44,8 +44,8 @@ func TestEventMethodsUpdateChannelState(t *testing.T) {
 	if ch.aftertouch != 76 {
 		t.Fatalf("channel pressure = %d, want 76", ch.aftertouch)
 	}
-	if ch.pitch.bend != 808 {
-		t.Fatalf("pitch bend = %v, want 808", ch.pitch.bend)
+	if ch.bend != 808 {
+		t.Fatalf("pitch bend = %v, want 808", ch.bend)
 	}
 	if ch.noteAftertouch[60] != 55 || !ch.noteTouchEnable {
 		t.Fatalf("poly pressure state = %d, in-use %v; want 55, true", ch.noteAftertouch[60], ch.noteTouchEnable)

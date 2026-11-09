@@ -47,7 +47,7 @@ type Synth struct {
 	offs [2]int16
 	x    [2]uint
 
-	quad, pseudo4, rhythm, silent bool
+	quad, pseudo4, rhythm bool
 }
 
 func NewSynth() *Synth {

@@ -281,7 +281,7 @@ func TestDecoderNoteOnPreservesPlaybackActivation(t *testing.T) {
 	if m.pos.cur.isPlaying {
 		t.Fatal("RSXX volume-only retrigger started playback")
 	}
-	m.Synth.playbackNoteOff(base, 60, 50)
+	m.playbackNoteOff(base, 60, 50)
 	if got := m.mchans[base].activeNotes[60]; got == nil || got.vol != 50 {
 		t.Fatalf("RSXX note-off did not update volume: %v", got)
 	}
