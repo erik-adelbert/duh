@@ -1,3 +1,27 @@
+// duh midi driver for OPL3
+//
+// Based on:
+//   Wohlstand libADLMIDI
+//   bisqwit adlmidi
+//
+// Uses:
+//   sneakernets DMXOPL wopl definitions
+//
+// Original:
+// Copyright (c) 2010-2014 Joel Yliluoma
+// Copyright (c) 2015-2026 Vitaly Novichkov
+//
+// Banks:
+// Copyright (c) 2017 Shannon Freeman
+//
+// Go implementation and modifications:
+// Copyright (C) 2026 Erik Adelbert
+//
+// This software is licensed under the GNU Lesser General Public
+// License, version 2.1 or later.
+//
+// See LICENSE for the complete license text.
+
 package mid
 
 import (
@@ -135,7 +159,6 @@ func (db *BankDB) AddIns(mb *MidiBank, ID int, ie *InsEntry, op []OP, meta strin
 
 	if i == -1 {
 		i = len(db.Ins)
-		// ie.ID = i
 		db.Ins = append(db.Ins, ie)
 	}
 
@@ -146,20 +169,8 @@ func (db *BankDB) AddIns(mb *MidiBank, ID int, ie *InsEntry, op []OP, meta strin
 
 // eq compares instrument content, ignoring the Metas field.
 func (ie *InsEntry) eq(o *InsEntry) bool {
-	return ie.Note == o.Note &&
-		ie.VelOff == o.VelOff &&
-		ie.SecVoice == o.SecVoice &&
-		ie.DrumKey == o.DrumKey &&
-		ie.Flags == o.Flags &&
-		ie.FBConn == o.FBConn &&
-		ie.KON == o.KON &&
-		ie.KOFF == o.KOFF &&
-		ie.Ops == o.Ops
+	return ie.InsData == o.InsData
 }
-
-// func has[T ~int | ~uint8 | ~uint16](flags, mask T) bool {
-// 	return flags&mask != 0
-// }
 
 type BankEntry struct {
 	ID     int
@@ -202,6 +213,10 @@ func NewMidiBank(lsb, msb uint8) *MidiBank {
 type InsEntry struct {
 	Metas []string
 
+	InsData
+}
+
+type InsData struct {
 	Note struct {
 		Off0, Off1 int8
 	}
@@ -214,7 +229,8 @@ type InsEntry struct {
 
 	FBConn uint16
 
-	KON, KOFF time.Duration
+	KON, KOFF        time.Duration
+	HasStoredTimings bool
 
 	Ops [4]int
 }
@@ -227,6 +243,14 @@ func NewInsEntry() *InsEntry {
 
 func (ie *InsEntry) SetFBConn(fbcon0, fbcon1 uint16) {
 	ie.FBConn = (fbcon0 & 0xF) | ((fbcon1 & 0xF) << 8)
+}
+
+func Is4Op(flags int) bool {
+	return has(flags, Flag4op|FlagPseudo4op)
+}
+
+func IsPseudo4Op(flags int) bool {
+	return has(flags, FlagPseudo4op)
 }
 
 type OP struct {
@@ -256,6 +280,7 @@ const (
 	VolMSAdlib
 	VolIMFCreator
 	VolOConnel
+	VolModelCount
 )
 
 const (
@@ -273,17 +298,6 @@ const (
 	BnkHMI     = 0x309
 	BnkHMIOld  = 0x30A
 )
-
-const opMask = Flag2op | Flag4op | FlagPseudo4op
-
-func Is4Op(flags int) bool {
-	kind := flags & opMask
-	return kind == Flag4op || kind == FlagPseudo4op
-}
-
-func IsPseudo4Op(flags int) bool {
-	return has(flags&opMask, FlagPseudo4op)
-}
 
 const (
 	DrumBass   = 0x08

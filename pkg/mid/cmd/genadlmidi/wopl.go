@@ -1,3 +1,27 @@
+// duh midi driver for OPL3
+//
+// Based on:
+//   Wohlstand libADLMIDI
+//   bisqwit adlmidi
+//
+// Uses:
+//   sneakernets DMXOPL wopl definitions
+//
+// Original:
+// Copyright (c) 2010-2014 Joel Yliluoma
+// Copyright (c) 2015-2026 Vitaly Novichkov
+//
+// Banks:
+// Copyright (c) 2017 Shannon Freeman
+//
+// Go implementation and modifications:
+// Copyright (C) 2026 Erik Adelbert
+//
+// This software is licensed under the GNU Lesser General Public
+// License, version 2.1 or later.
+//
+// See LICENSE for the complete license text.
+
 package main
 
 import (
@@ -35,7 +59,7 @@ type WOPLBank struct {
 
 // Name returns the bank name as a string
 func (b *WOPLBank) Name() string {
-	return strings.TrimRight(string(b.name[:]), "\x00")
+	return strings.TrimRight(b.name, "\x00")
 }
 
 // SetName sets the bank name (max 32 chars)
@@ -185,20 +209,20 @@ func SaveInsToMem(file *WOPLIFile, dest []byte, version uint16) error {
 }
 
 // CalculateInsFileSize returns the size needed for a single-instrument file
-func CalculateInsFileSize(file *WOPLIFile, ver uint16) int {
+func CalculateInsFileSize(file *WOPLIFile, version uint16) int {
 	if file == nil {
 		return 0
 	}
 
-	if ver == 0 {
-		ver = WOPLVER
+	if version == 0 {
+		version = WOPLVER
 	}
 
 	filesz := 11 + 2 + 1
 
 	var inssz int
 
-	if ver > 2 {
+	if version > 2 {
 		inssz = WOPL3INSSZ - 4
 	} else {
 		inssz = WOPL2INSSZ
@@ -244,9 +268,9 @@ type WOPLFile struct {
 
 // WOPL_Init initializes a WOPLFile with the given number of melodic and
 // percussive banks. A value of 0 means "create one blank bank".
-func NewWOPLFile(ver uint16, flags, volmod uint8, nmelo, ndrum uint16) *WOPLFile {
+func NewWOPLFile(version uint16, flags, volmod uint8, nmelo, ndrum uint16) *WOPLFile {
 	file := &WOPLFile{
-		ver:    ver,
+		ver:    version,
 		flags:  flags,
 		volmod: volmod,
 		melos:  make([]WOPLBank, max(1, nmelo)),
@@ -315,8 +339,8 @@ func LoadBankFromMem(mem []byte) (*WOPLFile, error) {
 		return nil, errUnexpectedEnding
 	}
 
-	nmelo := max(1, U16(mem[cursor:cursor+2]))
-	ndrum := max(1, U16(mem[cursor+2:cursor+4]))
+	nmelo := U16(mem[cursor : cursor+2])
+	ndrum := U16(mem[cursor+2 : cursor+4])
 
 	flags := mem[cursor+4]
 	volmod := mem[cursor+5]
@@ -400,12 +424,12 @@ func SaveBankToMem(file *WOPLFile, dest []byte, version uint16, forceGM bool) er
 		length -= n
 	}
 
-	nmelos := uint16(len(file.melos))
-	ndrums := uint16(len(file.drums))
+	nmelo := uint16(len(file.melos))
+	ndrum := uint16(len(file.drums))
 
 	if forceGM {
-		nmelos = 1
-		ndrums = 1
+		nmelo = 1
+		ndrum = 1
 	}
 
 	// Magic
@@ -430,7 +454,7 @@ func SaveBankToMem(file *WOPLFile, dest []byte, version uint16, forceGM bool) er
 		return errUnexpectedEnding
 	}
 
-	binary.BigEndian.PutUint16(dest[cursor:cursor+2], nmelos)
+	binary.BigEndian.PutUint16(dest[cursor:cursor+2], nmelo)
 	advance(2)
 
 	// Percussive bank count
@@ -438,7 +462,7 @@ func SaveBankToMem(file *WOPLFile, dest []byte, version uint16, forceGM bool) er
 		return errUnexpectedEnding
 	}
 
-	binary.BigEndian.PutUint16(dest[cursor:cursor+2], ndrums)
+	binary.BigEndian.PutUint16(dest[cursor:cursor+2], ndrum)
 	advance(2)
 
 	// Flags
@@ -454,11 +478,11 @@ func SaveBankToMem(file *WOPLFile, dest []byte, version uint16, forceGM bool) er
 	if version >= 2 {
 		for slot := range 2 {
 			banks := file.drums
-			count := nmelos
+			count := ndrum
 
 			if slot == 0 {
 				banks = file.melos
-				count = nmelos
+				count = nmelo
 			}
 
 			for j := range count {
@@ -477,20 +501,18 @@ func SaveBankToMem(file *WOPLFile, dest []byte, version uint16, forceGM bool) er
 	}
 
 	// Instruments
-	var inssz int
-	if version >= 3 {
+	inssz := WOPL2INSSZ
+	if version > 2 {
 		inssz = WOPL3INSSZ
-	} else {
-		inssz = WOPL2INSSZ
 	}
 
 	for slot := range 2 {
 		banks := file.drums
-		count := nmelos
+		count := ndrum
 
 		if slot == 0 {
 			banks = file.melos
-			count = nmelos
+			count = nmelo
 		}
 
 		if length < 128*inssz*int(count) {
@@ -526,7 +548,7 @@ func CalculateBankFileSize(file *WOPLFile, ver uint16) int {
 	}
 
 	inssz := WOPL2INSSZ
-	if ver >= 3 {
+	if ver > 2 {
 		inssz = WOPL3INSSZ
 	}
 
@@ -542,7 +564,7 @@ type WOPLIns struct {
 		off0, off1 int16
 	}
 	veloff int8
-	secvod float64
+	secvod int8
 	drumid uint8
 	flags  uint8
 
@@ -565,7 +587,7 @@ func ParseInstrument(data []byte, version uint16, timed bool) WOPLIns {
 	ins.note.off1 = int16(U16(data[34:36]))
 
 	ins.veloff = int8(data[36])
-	ins.secvod = float64(data[37])
+	ins.secvod = int8(data[37])
 	ins.drumid = data[38]
 
 	ins.flags = data[39]
@@ -582,7 +604,7 @@ func ParseInstrument(data []byte, version uint16, timed bool) WOPLIns {
 		ins.ops[i].wave80 = data[off+4]
 	}
 
-	if version >= 3 && timed {
+	if version > 2 && timed {
 		ins.kon = time.Duration(U16(data[62:64])) * time.Millisecond
 		ins.koff = time.Duration(U16(data[64:66])) * time.Millisecond
 	}
@@ -613,7 +635,7 @@ func WriteInstrument(ins *WOPLIns, data []byte, version uint16, hasSoundingDelay
 		data[off+4] = ins.ops[i].wave80
 	}
 
-	if version >= 3 && hasSoundingDelays {
+	if version > 2 && hasSoundingDelays {
 		binary.BigEndian.PutUint16(data[62:64], uint16(ins.kon/time.Millisecond))
 		binary.BigEndian.PutUint16(data[64:66], uint16(ins.koff/time.Millisecond))
 	}
@@ -635,10 +657,13 @@ func LoadWOPL(banks *mid.BankDB, id int, bi BankInfo) error {
 	if err != nil {
 		return fmt.Errorf("parse WOPL: %w", err)
 	}
+	if wopl.volmod > mid.VolOConnel {
+		return fmt.Errorf("parse WOPL: unsupported volume model %d", wopl.volmod)
+	}
 
-	load := func(mb *mid.MidiBank, patch int, win WOPLIns) error {
+	load := func(mb *mid.MidiBank, patch int, win WOPLIns, perc bool) {
 		if has(win.flags, WOPLInsBlank) {
-			return nil
+			return
 		}
 
 		var (
@@ -649,7 +674,6 @@ func LoadWOPL(banks *mid.BankDB, id int, bi BankInfo) error {
 		ins := mid.NewInsEntry()
 
 		defs[0] = mkdef(win.ops[WOPLOPMod0], win.ops[WOPLOPCar0], win.fbc0.con0)
-		ins.Note.Off0 = int8(win.note.off0)
 
 		quad := has(win.flags, WOPLIns4Op|WOPLInsPseudo4Op)
 
@@ -658,24 +682,27 @@ func LoadWOPL(banks *mid.BankDB, id int, bi BankInfo) error {
 			defs[1] = mkdef(win.ops[WOPLOPMod1], win.ops[WOPLOPCar1], win.fbc0.con1)
 			ins.Note.Off1 = int8(win.note.off1)
 
-			if has(win.flags, WOPLIns4Op) {
-				ins.Flags |= mid.Flag4op
-			} else {
+			if has(win.flags, WOPLInsPseudo4Op) {
 				ins.Flags |= mid.FlagPseudo4op
+			} else {
+				ins.Flags |= mid.Flag4op
 			}
 		}
 
-		if wopl.ver >= 2 {
+		if wopl.ver >= 3 {
 			ins.KON = win.kon
 			ins.KOFF = win.koff
+			ins.HasStoredTimings = true
 		}
 
-		ins.Flags = int(win.flags)
+		ins.Flags |= int(win.flags) &^ (WOPLIns4Op | WOPLInsPseudo4Op)
 
 		ins.Note.Off0 = int8(win.note.off0)
-		ins.Note.Off1 = int8(win.note.off1)
 		ins.DrumKey = win.drumid
-		ins.SecVoice = win.secvod
+		if perc && win.drumid != 0 {
+			ins.Flags |= mid.FlagFixedTone
+		}
+		ins.SecVoice = float64(((int(win.secvod)+128)>>1)-64) / 32
 		ins.VelOff = win.veloff
 
 		ins.SetFBConn(uint16(win.fbc0.con0), uint16(win.fbc0.con1))
@@ -684,20 +711,16 @@ func LoadWOPL(banks *mid.BankDB, id int, bi BankInfo) error {
 		toOPs(defs[1], ops[:], 2)
 
 		banks.AddIns(mb, patch, ins, ops[:], fn)
-
-		return nil
 	}
 
-	bid := banks.AddBank(id, bi.Name, mid.BnkApogee)
+	bid := banks.AddBank(id, bi.Name, uint16(wopl.volmod)|uint16(wopl.flags&7)<<8)
 
 	reg := func(wbs []WOPLBank, perc bool) error {
 		for _, wb := range wbs {
 			mb := mid.NewMidiBank(wb.lsb, wb.msb)
 
 			for patch, win := range wb.ins {
-				if err := load(mb, patch, win); err != nil {
-					return err
-				}
+				load(mb, patch, win, perc)
 			}
 
 			banks.AddMidi(bid, mb, perc)
@@ -719,18 +742,18 @@ func LoadWOPL(banks *mid.BankDB, id int, bi BankInfo) error {
 
 func mkdef(modulator, carrier WOPLOp, feedback uint8) idef {
 	return idef{
-		modulator.avek20, carrier.avek20,
-		modulator.adec60, carrier.adec60,
-		modulator.susr80, carrier.susr80,
-		modulator.wave80, carrier.wave80,
-		modulator.ksll40, carrier.ksll40,
+		carrier.avek20, modulator.avek20,
+		carrier.adec60, modulator.adec60,
+		carrier.susr80, modulator.susr80,
+		carrier.wave80, modulator.wave80,
+		carrier.ksll40, modulator.ksll40,
 		feedback,
 	}
 }
 
 // Name returns the instrument name as a string
 func (i *WOPLIns) Name() string {
-	return strings.TrimRight(string(i.name[:]), "\x00")
+	return strings.TrimRight(i.name, "\x00")
 }
 
 // SetName sets the instrument name (max 32 chars)

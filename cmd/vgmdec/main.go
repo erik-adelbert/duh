@@ -11,7 +11,7 @@ import (
 	"io"
 	"os"
 
-	vgm "github.com/erik-adelbert/duh/pkg/vgmo3"
+	"github.com/erik-adelbert/duh/pkg/vgm"
 	"github.com/erik-adelbert/duh/pkg/xflags"
 )
 

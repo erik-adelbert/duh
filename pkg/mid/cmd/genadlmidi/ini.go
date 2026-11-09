@@ -1,3 +1,27 @@
+// duh midi driver for OPL3
+//
+// Based on:
+//   Wohlstand libADLMIDI
+//   bisqwit adlmidi
+//
+// Uses:
+//   sneakernets DMXOPL wopl definitions
+//
+// Original:
+// Copyright (c) 2010-2014 Joel Yliluoma
+// Copyright (c) 2015-2026 Vitaly Novichkov
+//
+// Banks:
+// Copyright (c) 2017 Shannon Freeman
+//
+// Go implementation and modifications:
+// Copyright (C) 2026 Erik Adelbert
+//
+// This software is licensed under the GNU Lesser General Public
+// License, version 2.1 or later.
+//
+// See LICENSE for the complete license text.
+
 package main
 
 import (
@@ -5,7 +29,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 )
 
@@ -59,22 +82,64 @@ func convert(ini, conf string) error {
 		return err
 	}
 
+	x, ok := sections["General"]["auto_id"]
+	autoid := ok && x == "true"
+
+	delete(sections, "General")
+	dmxBanks := []map[string]string{
+		{
+			"file":   "fm_banks_new/wopl_files/GENMIDI.wopl",
+			"format": "WOPL",
+			"games":  "GENMIDI",
+			"name":   "WOPL (DMXOPL3 GM)",
+			"prefix": "gm",
+		},
+		{
+			"file":   "fm_banks_new/wopl_files/GENMIDI(XG).wopl",
+			"format": "WOPL",
+			"games":  "Yamaha XG",
+			"name":   "WOPL (DMXOPL3 XG)",
+			"prefix": "xg",
+		},
+		{
+			"file":   "fm_banks_new/wopl_files/GENMIDI(GS).wopl",
+			"format": "WOPL",
+			"games":  "Roland GS",
+			"name":   "WOPL (DMXOPL3 GS)",
+			"prefix": "gs",
+		},
+	}
+	for _, bank := range dmxBanks {
+		present := false
+		for _, section := range sections {
+			if section["file"] == bank["file"] {
+				present = true
+				break
+			}
+		}
+		if present {
+			continue
+		}
+
+		id := len(sections)
+		for {
+			key := fmt.Sprintf("bank-%02d", id)
+			if _, exists := sections[key]; !exists {
+				sections[key] = bank
+				break
+			}
+			id++
+		}
+	}
+
 	var cf struct {
 		General General                      `json:"general"`
 		Banks   map[string]map[string]string `json:"banks"`
 	}
-
-	nbank, _ := strconv.Atoi(sections["General"]["banks"])
-
-	x, ok := sections["General"]["auto_id"]
-	autoid := ok && x == "true"
-
 	cf.General = General{
-		BankCount: uint(nbank),
+		BankCount: uint(len(sections)),
 		AutoID:    autoid,
 	}
-
-	delete(sections, "General")
 
 	cf.Banks = sections
 

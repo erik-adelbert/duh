@@ -1,3 +1,27 @@
+// duh midi driver for OPL3
+//
+// Based on:
+//   Wohlstand libADLMIDI
+//   bisqwit adlmidi
+//
+// Uses:
+//   sneakernets DMXOPL wopl definitions
+//
+// Original:
+// Copyright (c) 2010-2014 Joel Yliluoma
+// Copyright (c) 2015-2026 Vitaly Novichkov
+//
+// Banks:
+// Copyright (c) 2017 Shannon Freeman
+//
+// Go implementation and modifications:
+// Copyright (C) 2026 Erik Adelbert
+//
+// This software is licensed under the GNU Lesser General Public
+// License, version 2.1 or later.
+//
+// See LICENSE for the complete license text.
+
 package main
 
 import (
@@ -25,22 +49,21 @@ func DownloadFMBanks() {
 		return
 	}
 
+	sources := []struct {
+		name string
+		list func() ([]fileJob, error)
+	}{
+		{name: "libADLMIDI", list: listLibADLMIDIFiles},
+		{name: "DMXOPL", list: listWOPLFiles},
+	}
 	var files []fileJob
-
-	rootPath := "fm_banks_new" // folder in the repo
-
-	// Map repo path "fm_banks/foo/bar.bin" -> "./fm_banks/foo/bar.bin".
-	err := walk(owner, repo, rootPath, func(c GitHubContent) {
-		rel := strings.TrimPrefix(c.Path, rootPath)
-		rel = strings.TrimPrefix(rel, "/")
-
-		dst := filepath.Join(destDir, filepath.FromSlash(rel))
-		files = append(files, fileJob{dst: dst, url: c.DownloadURL})
-	})
-
-	if err != nil {
-		fmt.Printf("walk: %v\n", err)
-		return
+	for _, source := range sources {
+		sourceFiles, err := source.list()
+		if err != nil {
+			fmt.Printf("list %s files: %v\n", source.name, err)
+			return
+		}
+		files = append(files, sourceFiles...)
 	}
 
 	fmt.Printf("found %d files\n", len(files))
@@ -85,6 +108,61 @@ func DownloadFMBanks() {
 		os.Exit(1)
 	}
 	fmt.Println("done.")
+}
+
+func listLibADLMIDIFiles() ([]fileJob, error) {
+	const rootPath = "fm_banks_new"
+
+	var files []fileJob
+	// Map repo path "fm_banks/foo/bar.bin" -> "./fm_banks/foo/bar.bin".
+	err := walk(owner, repo, rootPath, func(c GitHubContent) {
+		rel := strings.TrimPrefix(c.Path, rootPath)
+		rel = strings.TrimPrefix(rel, "/")
+
+		dst := filepath.Join(destDir, filepath.FromSlash(rel))
+		files = append(files, fileJob{dst: dst, url: c.DownloadURL})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walk %s/%s/%s: %w", owner, repo, rootPath, err)
+	}
+	return files, nil
+}
+
+func listWOPLFiles() ([]fileJob, error) {
+	const (
+		woplOwner = "sneakernets"
+		woplRepo  = "DMXOPL"
+	)
+	wanted := []string{
+		"GENMIDI.wopl",
+		"GENMIDI(GS).wopl",
+		"GENMIDI(XG).wopl",
+	}
+
+	contents, err := listContents(woplOwner, woplRepo, "")
+	if err != nil {
+		return nil, fmt.Errorf("list %s/%s: %w", woplOwner, woplRepo, err)
+	}
+
+	byName := make(map[string]GitHubContent, len(contents))
+	for _, content := range contents {
+		if content.Type == "file" {
+			byName[content.Name] = content
+		}
+	}
+
+	jobs := make([]fileJob, 0, len(wanted))
+	for _, name := range wanted {
+		content, ok := byName[name]
+		if !ok {
+			return nil, fmt.Errorf("%s not found in %s/%s", name, woplOwner, woplRepo)
+		}
+		jobs = append(jobs, fileJob{
+			dst: filepath.Join(destDir, "wopl_files", name),
+			url: content.DownloadURL,
+		})
+	}
+	return jobs, nil
 }
 
 type GitHubContent struct {

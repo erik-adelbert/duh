@@ -1,7 +1,7 @@
 //go:build !windows
 
 // adlmidi-go: A Go port of ADLMIDI (OPL3 emulation MIDI player)
-// Streams raw PCM (S16LE, stereo) to stdout.
+// Streams raw PCM (S16LE, stereo, 48k) to stdout.
 //
 // Usage:
 //   adlmidi-go [options] <midifilename> [<banknumber> [<numcards> [<numfourops>]]]
@@ -13,16 +13,15 @@
 package main
 
 import (
-	"encoding/binary"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
-	"os/signal"
 	"strconv"
-	"syscall"
-	"time"
 
 	mid "github.com/erik-adelbert/duh/pkg/mid"
+	"github.com/erik-adelbert/duh/pkg/xflags"
 )
 
 // ---------------------------------------------------------------------------
@@ -32,42 +31,6 @@ import (
 const (
 	// Maximum number of OPL3 cards that can be emulated.
 	MaxCards = 100
-
-	// Maximum number of samples we allow to accumulate at once.
-	MaxSamplesAtTime = mid.PCMRate / 40
-)
-
-// ---------------------------------------------------------------------------
-// Global player state (replaces the globals from the original C++ file)
-// ---------------------------------------------------------------------------
-
-var (
-	// Options
-	AdlPercussionMode  bool
-	HighVibratoMode    bool
-	HighTremoloMode    bool
-	ScaleModulators    bool
-	SoftPanning        bool
-	QuitWithoutLooping bool
-
-	AdlBank    int
-	NumCards   int
-	NumFourOps int
-	// DoingInstrumentTesting bool
-	// QuitFlag    bool
-	SkipForward int
-)
-
-var VolumeModel int
-
-var (
-	banknames = func() []string {
-		names := make([]string, len(mid.Banks))
-		for i, bank := range mid.Banks {
-			names[i] = bank.Name
-		}
-		return names
-	}()
 )
 
 // ---------------------------------------------------------------------------
@@ -75,285 +38,181 @@ var (
 // ---------------------------------------------------------------------------
 
 func main() {
-	// ---- Flag definitions -------------------------------------------------
-	// All flags MUST appear before the positional arguments.
+	a := getArgs()
+	defer a.input.Close() //nolint:errcheck // can't do anything if it fails
 
-	flag.BoolVar(&AdlPercussionMode, "p", false,
-		"Enable adlib percussion instrument mode (use with CMF files)")
-	flag.BoolVar(&HighTremoloMode, "t", false,
-		"Enable tremolo amplification mode")
-	flag.BoolVar(&HighVibratoMode, "v", false,
-		"Enable vibrato amplification mode")
-	flag.BoolVar(&ScaleModulators, "s", false,
-		"Enable scaling of modulator volumes")
-	flag.BoolVar(&SoftPanning, "sp", false,
-		"Enable soft panning (full stereo positioning instead of left/right/both)")
-	flag.IntVar(&VolumeModel, "vm", 0,
-		"Volume model: 0 = from bank, 1 generic, 2 native, 3 DMX, 4 Apogee, 5 Win9x SB16,\n"+
-			"6 DMX fixed, 7 Apogee fixed, 8 AIL, 9 Win9x generic FM, 10 HMI, 11 HMI old,\n"+
-			"12 MS AdLib, 13 IMF Creator, 14 O'Connell")
-	flag.BoolVar(&QuitWithoutLooping, "nl", true,
-		"Quit without looping")
+	midi, err := mid.Decode(a.input, a.opts)
+	die(err, "Failed to decode MIDI file", 2)
+	defer midi.Close()
 
-	flag.BoolVar(&WritePCMfile, "w", false,
-		"Write WAV/PCM to stdout rather than playing (default: always stdout)")
-
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr,
-			"Usage: %s [options] <midifilename> [ <banknumber> [ <numcards> [ <numfourops>] ] ]\n"+
-				"       %s [options] <midifilename> -1   To enter instrument tester\n\n",
-			os.Args[0], os.Args[0])
-		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nBanks:\n")
-		for a, name := range banknames {
-			fmt.Fprintf(os.Stderr, "%10s%2d = %s\n", "", a, name)
-		}
-		fmt.Fprintf(os.Stderr,
-			"\n"+
-				"     Use banks 2-5 to play Descent \"q\" soundtracks.\n"+
-				"     Look up the relevant bank number from descent.sng.\n\n"+
-				"     <numfourops> can be used to specify the number\n"+
-				"     of four-op channels to use. Each four-op channel eats\n"+
-				"     the room of two regular channels. Use as many as required.\n"+
-				"     The Doom & Hexen sets require one or two, while\n"+
-				"     Miles four-op set requires the maximum of numcards*6.\n\n"+
-				"     When playing Creative Music Files (CMF), try the\n"+
-				"     -p and -v options if it sounds wrong otherwise.\n\n")
-	}
-
-	flag.Parse()
-
-	args := flag.Args()
-	if len(args) < 1 {
-		flag.Usage()
-		os.Exit(0)
-	}
-
-	midiFile := flag.Args()[0]
-	posArgs := flag.Args()[1:]
-
-	// ---- Bank / cards / fourops ------------------------------------------
-	AdlBank = 0
-	NumCards = 4
-	NumFourOps = 7
-
-	if len(posArgs) >= 1 {
-		nbank := len(banknames)
-
-		bankno, _ := strconv.Atoi(posArgs[0])
-
-		if bankno == -1 {
-			bankno = 0
-			DoingInstrumentTesting = true
-		}
-
-		AdlBank = bankno
-		if AdlBank < 0 || AdlBank >= nbank {
-			fmt.Fprintf(os.Stderr, "bank number may only be 0..%d.\n", nbank-1)
-			os.Exit(0)
-		}
-	}
-
-	if len(banknames) == 0 {
-		fmt.Fprintln(os.Stderr, "no ADL banks are available")
-		os.Exit(1)
-	}
-
-	// Count four-op melodic patches in the selected bank.
-	var nquad, sums [2]uint
-	if len(mid.Banks[AdlBank].Melos) > 0 {
-		midiBank := mid.Banks[AdlBank].Melos[0]
-		for _, metaID := range midiBank.Programs {
-			if metaID == 0 || int(metaID) >= len(mid.ADLMetas) {
-				continue
-			}
-			sums[0]++
-			meta := mid.ADLMetas[metaID]
-			if meta.ADLID0 != meta.ADLID1 {
-				nquad[0]++
-			}
-		}
-	}
-
-	if len(posArgs) >= 2 {
-		NumCards, _ = strconv.Atoi(posArgs[1])
-
-		if NumCards < 1 || NumCards > MaxCards {
-			fmt.Fprintf(os.Stderr, "number of cards may only be 1..%d.\n", MaxCards)
-			os.Exit(0)
-		}
-	}
-
-	if len(posArgs) >= 3 {
-		NumFourOps, _ = strconv.Atoi(posArgs[2])
-
-		if NumFourOps < 0 || NumFourOps > 6*NumCards {
-			fmt.Fprintf(os.Stderr,
-				"number of four-op channels may only be 0..%d when %d OPL3 cards are used.\n",
-				6*NumCards, NumCards)
-			os.Exit(0)
-		}
-	} else if sums[0] != 0 {
-		switch {
-		case DoingInstrumentTesting:
-			NumFourOps = 2
-		case nquad[0] >= sums[0]*7/8:
-			NumFourOps = NumCards * 6
-		case nquad[0] < sums[0]*1/8:
-			NumFourOps = 0
-		case NumCards == 1:
-			NumFourOps = 1
-		default:
-			NumFourOps = NumCards * 4
-		}
-	}
-
-	if nquad[0] >= sums[0]*15/16 && NumFourOps == 0 {
-		fmt.Fprintf(os.Stderr,
-			"ERROR: You have selected a bank that consists almost exclusively of four-op patches.\n"+
-				"       The results (silence + much cpu load) would be probably\n"+
-				"       not what you want, therefore ignoring the request.\n")
-		os.Exit(0)
-	}
-
-	mode := 0
-	if AdlPercussionMode {
-		mode |= mid.ModeADLPercussion
-	}
-
-	if HighTremoloMode {
-		mode |= mid.ModeHighTremolo
-	}
-
-	if HighVibratoMode {
-		mode |= mid.ModeHighVibrato
-	}
-
-	if ScaleModulators {
-		mode |= mid.ModeScaleModulators
-	}
-
-	if SoftPanning {
-		mode |= mid.ModeSoftPanning
-	}
-
-	// ---- Initialise player ------------------------------------------------
-	mid.BankSelect = uint(AdlBank)
-	player := mid.NewMIDIDecoder(NumCards, NumFourOps, mode)
-	player.ChooseDevice("")
-	player.SetVolumeModel(VolumeModel)
-
-	// ---- Signals ----------------------------------------------------------
-	sigchan := make(chan os.Signal, 1)
-	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigchan
-		// QuitFlag = true
-		player.Quit()
-	}()
-
-	err := player.Open(midiFile)
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to open MIDI file: %v\n", err)
-		os.Exit(2)
-	}
-
-	player.SetNoLooping(QuitWithoutLooping)
-
-	// ---- Instrument tester -------------------------------------------------
-	// var InstrumentTester Tester
-	// if DoingInstrumentTesting {
-	// 	InstrumentTester = mid.NewTester(player.opl)
-	// }
-
-	// ---- Main loop --------------------------------------------------------
-	// mindelay := time.Second / time.Duration(PCMRate)
-	// maxdelay := time.Second * time.Duration(MaxSamplesAtTime) / time.Duration(PCMRate)
-
-	// delay := mindelay
-	// carry := 0 * time.Second
-
-	var dt time.Duration
-
-	buf := make([]int16, MaxSamplesAtTime*2)
-	tmp := make([]int16, MaxSamplesAtTime*2)
-	acc := make([]int32, MaxSamplesAtTime*2)
-
-	for !player.IsFinished() {
-		wait := player.Tick(dt)
-
-		// dt is exactly what gets rendered, so the sequencer never drifts.
-		frames := max(1, min(int(wait.Seconds()*mid.PCMRate), MaxSamplesAtTime))
-		dt = time.Duration(frames) * time.Second / time.Duration(mid.PCMRate)
-
-		n := frames * 2
-		clear(acc[:n])
-
-		for card := range NumCards {
-			player.OPL.Cards[card].Stream2Ch(tmp[:n], n)
-
-			for i, s := range tmp[:n] {
-				acc[i] += int32(s)
-			}
-		}
-
-		for i, s := range acc[:n] {
-			buf[i] = clip16(s) // int16(max(-32768, min(32767, s)))
-		}
-
-		SendStereoAudio(buf[:n])
+	if _, err := io.Copy(os.Stdout, midi); err != nil {
+		die(err, "Failed to copy decoded audio", 1)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Helpers and stubs for ported types
-// ---------------------------------------------------------------------------
-
-// -------- Configuration / globals mirrored from the C code --------
 
 var (
-	DoingInstrumentTesting bool
-	WritePCMfile           bool   // set true to emit PCM
-	PCMfilepath            string // "-" means stdout
+	bnknames = mid.BankNames()
+	modnames = mid.VolumeModels()
 )
 
-// -------- Ported SendStereoAudio --------
+type args struct {
+	input io.ReadCloser
+	opts  mid.DecoderOptions
+}
 
-func SendStereoAudio(samples []int16) {
-	for len(samples) > 0 {
-		frames := min(len(samples)/2, MaxSamplesAtTime)
+func getArgs() args {
+	fs := parseFlags()
 
-		if frames == 0 {
-			return
+	pargs := fs.set.Args()
+
+	path := *fs.path
+	if path == "-" && len(pargs) > 0 {
+		path = pargs[0]
+		pargs = pargs[1:]
+	}
+
+	if len(pargs) > 3 {
+		err := errors.New("too many positional arguments")
+		die(err, "Invalid arguments", 2)
+	}
+
+	if len(bnknames) == 0 {
+		err := errors.New("no ADL banks are available")
+		die(err, "Failed to load banks", 1)
+	}
+
+	bank, ncard, n4op := 0, 4, 0
+	if len(pargs) > 0 {
+		bank = parseInt(pargs[0], "bank number")
+		if bank == -1 {
+			bank = 0
 		}
+		if bank < 0 || bank >= len(bnknames) {
+			die(fmt.Errorf("bank number may only be 0..%d", len(bnknames)-1), "Invalid bank number", 2)
+		}
+	}
 
-		chunk := samples[:frames*2]
-		samples = samples[frames*2:]
-		sendChunkDirect(chunk)
+	if len(pargs) > 1 {
+		ncard = parseInt(pargs[1], "card count")
+		if ncard < 1 || ncard > MaxCards {
+			die(fmt.Errorf("number of cards may only be 1..%d", MaxCards), "Invalid card count", 2)
+		}
+	}
+
+	nquad, total, err := mid.Melodic4OpCount(bank)
+	die(err, "Failed to inspect ADL bank", 1)
+
+	if len(pargs) > 2 {
+		n4op = parseInt(pargs[2], "four-op count")
+	}
+	if n4op < 0 || n4op > 6*ncard {
+		die(fmt.Errorf("number of four-op channels may only be 0..%d when %d OPL3 cards are used", 6*ncard, ncard), "Invalid four-op count", 2)
+	}
+	if n4op == 0 {
+		n4op = defaultFourOps(nquad, total, ncard)
+	}
+
+	synthFlags := 0
+	if *fs.adlDrum {
+		synthFlags |= mid.ModeADLPercussion
+	}
+	if *fs.tremolo {
+		synthFlags |= mid.ModeHighTremolo
+	}
+	if *fs.vibrato {
+		synthFlags |= mid.ModeHighVibrato
+	}
+	if *fs.scaleMods {
+		synthFlags |= mid.ModeScaleModulators
+	}
+	if *fs.softPanning {
+		synthFlags |= mid.ModeSoftPanning
+	}
+
+	var input io.ReadCloser = io.NopCloser(os.Stdin)
+	if path != "-" {
+		file, err := os.Open(path)
+		die(err, "Failed to open MIDI file", 1)
+		input = file
+	}
+
+	return args{
+		input: input,
+		opts: mid.DecoderOptions{
+			CardCount: ncard, FourOps: n4op, Flags: synthFlags,
+			Bank: bank, VolumeModel: *fs.volumeModel, Loop: *fs.loop,
+		},
 	}
 }
 
-func sendChunkDirect(samples []int16) {
-	buf := make([]byte, len(samples)*2)
-
-	for i, s := range samples {
-		binary.LittleEndian.PutUint16(buf[i*2:], uint16(s))
+func defaultFourOps(nquad, total uint, ncard int) int {
+	if total == 0 {
+		return 0
 	}
 
-	os.Stdout.Write(buf)
-}
-
-type SampleFmt interface {
-	~int32 | ~float32
-}
-
-func clip16[T SampleFmt](val T) int16 {
 	switch {
-	case val < -32768:
-		return -32768
-	case val > 32767:
-		return 32767
+	case nquad*8 >= total*7:
+		return ncard * 6
+	case nquad*8 < total:
+		return 0
+	case ncard == 1:
+		return 1
+	default:
+		return ncard * 4
 	}
-	return int16(val)
 }
+
+func parseInt(value, name string) int {
+	n, err := strconv.Atoi(value)
+	die(err, "Invalid "+name, 2)
+	return n
+}
+
+type flags struct {
+	set         *flag.FlagSet
+	path        *string
+	adlDrum     *bool
+	tremolo     *bool
+	vibrato     *bool
+	scaleMods   *bool
+	softPanning *bool
+	volumeModel *int
+	loop        *bool
+}
+
+func parseFlags() flags {
+	set := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	set.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Decode MIDI files to raw PCM data\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: %s [flags] [file [bank [cards [four-ops]]]]\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Flags:\n")
+		set.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nA four-op count of 0 selects automatically from the bank.\n")
+		fmt.Fprintf(os.Stderr, "\nVolume Models:\n")
+		for i, name := range modnames {
+			fmt.Fprintf(os.Stderr, "%10s%2d = %s\n", "", i, name)
+		}
+		fmt.Fprintf(os.Stderr, "\nBanks:\n")
+		for i, name := range bnknames {
+			fmt.Fprintf(os.Stderr, "%10s%2d = %s\n", "", i, name)
+		}
+	}
+
+	fs := flags{
+		set:         set,
+		path:        set.String("f", "-", "path to MIDI file"),
+		adlDrum:     set.Bool("p", false, "enable adlib percussion mode (use with CMF files)"),
+		tremolo:     set.Bool("t", false, "enable tremolo amplification mode"),
+		vibrato:     set.Bool("v", false, "enable vibrato amplification mode"),
+		scaleMods:   set.Bool("s", false, "enable scaling of modulator volumes"),
+		softPanning: set.Bool("sp", false, "enable soft panning (default false)"),
+		volumeModel: set.Int("vm", 0, "volume model (default 0)"),
+		loop:        set.Bool("lp", false, "loop playback (default false)"),
+	}
+	if err := set.Parse(os.Args[1:]); err != nil {
+		die(err, "Invalid flags", 2)
+	}
+	return fs
+}
+
+var die = xflags.MkDie(os.Stderr)

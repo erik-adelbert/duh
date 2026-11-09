@@ -1,3 +1,27 @@
+// duh midi driver for OPL3
+//
+// Based on:
+//   Wohlstand libADLMIDI
+//   bisqwit adlmidi
+//
+// Uses:
+//   sneakernets DMXOPL wopl definitions
+//
+// Original:
+// Copyright (c) 2010-2014 Joel Yliluoma
+// Copyright (c) 2015-2026 Vitaly Novichkov
+//
+// Banks:
+// Copyright (c) 2017 Shannon Freeman
+//
+// Go implementation and modifications:
+// Copyright (C) 2026 Erik Adelbert
+//
+// This software is licensed under the GNU Lesser General Public
+// License, version 2.1 or later.
+//
+// See LICENSE for the complete license text.
+
 package mid
 
 import "fmt"
@@ -6,21 +30,23 @@ import "fmt"
 
 // AsTables converts the bank database into the instrument, meta, and patch
 // lookup tables consumed by the MIDI decoder.
-func (db *BankDB) AsTables() (*ADLTables, error) {
+func (db *BankDB) AsTables() (*adlTables, error) {
 	if db == nil {
 		return nil, fmt.Errorf("derive ADL tables: nil BankDB")
 	}
 
-	tables := &ADLTables{
-		Instruments: []ADLData{{}},
-		Metas:       []ADLMeta{MkADLMeta()},
-		Banks:       make([]ADLBank, len(db.Banks)),
-	}
+	tables := new(adlTables{
+		Instruments: []adlData{{}}, // First entry is silence
+		Metas:       []adlMeta{MkADLMeta()},
+		Banks:       make([]adlBank, len(db.Banks)),
+	})
+
 	metas := make([]int, len(db.Ins))
 
 	for i, ins := range db.Ins {
 		if ins == nil {
-			return nil, fmt.Errorf("derive ADL tables: nil instrument at index %d", i)
+			ctx := fmt.Sprintf("nil instrument %d", i)
+			return nil, mkError(ErrDB, ctx)
 		}
 
 		if has(ins.Flags, FlagSilence) {
@@ -32,13 +58,9 @@ func (db *BankDB) AsTables() (*ADLTables, error) {
 			npair = 2
 		}
 
-		// if len(tables.Metas) >= maxStaticADLIDs {
-		// 	return nil, fmt.Errorf("derive ADL tables: too many meta-instruments for static IDs")
-		// }
-
-		meta := ADLMeta{
-			ADLID0:         0,
-			ADLID1:         0,
+		meta := adlMeta{
+			ID0:            0,
+			ID1:            0,
 			VelocityOffset: ins.VelOff,
 			SecondFinetune: ins.SecVoice,
 			KON:            ins.KON,
@@ -49,39 +71,35 @@ func (db *BankDB) AsTables() (*ADLTables, error) {
 			meta.Tone = ins.DrumKey
 		}
 
-		if IsPseudo4Op(ins.Flags) {
-			meta.Flags |= FlagPseudo4op
-		}
+		meta.Flags |= ins.Flags & (FlagRhythmMask | FlagPseudo4op | Flag4op)
 
 		for j := range npair {
 			mi := ins.Ops[j*2]
 			ci := ins.Ops[j*2+1]
 
 			if mi < 0 || mi >= len(db.Ops) {
-				return nil, fmt.Errorf("derive ADL tables: instrument %d has invalid operator index %d", i, mi)
+				ctx := fmt.Sprintf("instrument %d invalid operator %d", i, mi)
+				return nil, mkError(ErrDB, ctx)
 			}
 
 			if ci < 0 || ci >= len(db.Ops) {
-				return nil, fmt.Errorf("derive ADL tables: instrument %d has invalid operator index %d", i, ci)
+				ctx := fmt.Sprintf("instrument %d invalid operator %d", i, ci)
+				return nil, mkError(ErrDB, ctx)
 			}
 
 			mod, car := db.Ops[mi], db.Ops[ci]
 
 			if mod == nil || car == nil {
-				return nil, fmt.Errorf("derive ADL tables: instrument %d references a nil operator", i)
+				ctx := fmt.Sprintf("instrument %d nil operator", i)
+				return nil, mkError(ErrDB, ctx)
 			}
 
-			// if len(tables.Instruments) >= maxStaticADLIDs {
-			// 	return nil, fmt.Errorf("derive ADL tables: too many instruments for static IDs")
-			// }
-
 			ft := ins.Note.Off1
-
 			if j == 0 {
 				ft = ins.Note.Off0
 			}
 
-			data := ADLData{
+			data := adlData{
 				ModulatorE862: mod.E862,
 				CarrierE862:   car.E862,
 				Modulator40:   uint8(mod.D40),
@@ -94,9 +112,10 @@ func (db *BankDB) AsTables() (*ADLTables, error) {
 			tables.Instruments = append(tables.Instruments, data)
 
 			if j == 0 {
-				meta.ADLID0 = id
+				meta.ID0 = id
 			}
-			meta.ADLID1 = id
+
+			meta.ID1 = id
 		}
 
 		metas[i] = len(tables.Metas)
@@ -104,42 +123,49 @@ func (db *BankDB) AsTables() (*ADLTables, error) {
 	}
 
 	hasMappings := false
-	for ii, bank := range db.Banks {
+	for i, bank := range db.Banks {
 		if bank == nil {
-			return nil, fmt.Errorf("derive ADL tables: nil bank at index %d", ii)
+			ctx := fmt.Sprintf("nil bank at index %d", i)
+			return nil, mkError(ErrDB, ctx)
 		}
 
 		hasMappings = hasMappings || len(bank.Melos)+len(bank.Drums) != 0
 
-		out := ADLBank{
+		out := adlBank{
 			ID:    bank.ID,
-			Name:  bank.Name,
+			name:  bank.Name,
 			Setup: bank.Setup,
 			// Preserve bank-select variants and their melodic/percussion roles.
 			Melos: make([]ADLMidiBank, 0, len(bank.Melos)),
 			Drums: make([]ADLMidiBank, 0, len(bank.Drums)),
 		}
 
-		for _, i := range bank.Melos {
-			midi, err := db.mkMidiBank(i, metas)
+		for _, j := range bank.Melos {
+			mb, err := db.mkMidiBank(j, metas)
 			if err != nil {
-				return nil, fmt.Errorf("derive ADL tables: bank %d melodic bank: %w", ii, err)
+				ctx := fmt.Sprintf("bank %d melodic bank: %v", i, err)
+				return nil, mkError(ErrDB, ctx)
 			}
-			out.Melos = append(out.Melos, midi)
+
+			out.Melos = append(out.Melos, mb)
 		}
 
-		for _, i := range bank.Drums {
-			midi, err := db.mkMidiBank(i, metas)
+		for _, j := range bank.Drums {
+			mb, err := db.mkMidiBank(j, metas)
 			if err != nil {
-				return nil, fmt.Errorf("derive ADL tables: bank %d drum bank: %w", ii, err)
+				ctx := fmt.Sprintf("bank %d drum bank: %v", i, err)
+				return nil, mkError(ErrDB, ctx)
 			}
-			out.Drums = append(out.Drums, midi)
+
+			out.Drums = append(out.Drums, mb)
 		}
-		tables.Banks[ii] = out
+
+		tables.Banks[i] = out
 	}
 
 	if len(db.Banks) != 0 && !hasMappings {
-		return nil, fmt.Errorf("ADL tables: banks contain no MIDI bank references; regenerate the database")
+		ctx := "no MIDI bank mappings; regenerate the database"
+		return nil, mkError(ErrDB, ctx)
 	}
 
 	return tables, nil
@@ -147,12 +173,14 @@ func (db *BankDB) AsTables() (*ADLTables, error) {
 
 func (db *BankDB) mkMidiBank(i int, metas []int) (ADLMidiBank, error) {
 	if i < 0 || i >= len(db.Midis) {
-		return ADLMidiBank{}, fmt.Errorf("invalid MIDI bank index %d", i)
+		ctx := fmt.Sprintf("invalid MIDI bank %d", i)
+		return ADLMidiBank{}, mkError(ErrDB, ctx)
 	}
 
 	bank := db.Midis[i]
 	if bank == nil {
-		return ADLMidiBank{}, fmt.Errorf("nil MIDI bank at index %d", i)
+		ctx := fmt.Sprintf("nil MIDI bank %d", i)
+		return ADLMidiBank{}, mkError(ErrDB, ctx)
 	}
 
 	mb := ADLMidiBank{LSB: bank.LSB, MSB: bank.MSB}
@@ -162,7 +190,8 @@ func (db *BankDB) mkMidiBank(i int, metas []int) (ADLMidiBank, error) {
 		}
 
 		if j >= len(metas) {
-			return ADLMidiBank{}, fmt.Errorf("patch %d references invalid instrument index %d", i, j)
+			ctx := fmt.Sprintf("patch %d invalid instrument %d", i, j)
+			return ADLMidiBank{}, mkError(ErrDB, ctx)
 		}
 
 		mb.Programs[i] = uint16(metas[j])

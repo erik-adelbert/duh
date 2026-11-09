@@ -4,22 +4,39 @@ middec \- command-line tool
 .SH SYNOPSIS
 .B middec
 .SH DESCRIPTION
+Decode MIDI files to raw PCM data
 .SH SYNOPSIS
-.B bin/middec [options] <midifilename> [ <banknumber> [ <numcards> [ <numfourops>] ] ]
-       bin/middec [options] <midifilename> -1   To enter instrument tester
-  -nl
-    	Quit without looping (default true)
-  -p	Enable adlib percussion instrument mode (use with CMF files)
-  -s	Enable scaling of modulator volumes
+.B bin/middec [flags] [file [bank [cards [four-ops]]]]
+.SH OPTIONS
+  -f string
+    	path to MIDI file (default "-")
+  -lp
+    	loop playback (default false)
+  -p	enable adlib percussion mode (use with CMF files)
+  -s	enable scaling of modulator volumes
   -sp
-    	Enable soft panning (full stereo positioning instead of left/right/both)
-  -t	Enable tremolo amplification mode
-  -v	Enable vibrato amplification mode
+    	enable soft panning (default false)
+  -t	enable tremolo amplification mode
+  -v	enable vibrato amplification mode
   -vm int
-    	Volume model: 0 = from bank, 1 generic, 2 native, 3 DMX, 4 Apogee, 5 Win9x SB16,
-    	6 DMX fixed, 7 Apogee fixed, 8 AIL, 9 Win9x generic FM, 10 HMI, 11 HMI old,
-    	12 MS AdLib, 13 IMF Creator, 14 O'Connell
-  -w	Write WAV/PCM to stdout rather than playing (default: always stdout)
+    	volume model (default 0)
+A four-op count of 0 selects automatically from the bank.
+Volume Models:
+           0 = From Bank (default)
+           1 = Generic
+           2 = Native
+           3 = DMX
+           4 = Apogee
+           5 = Win9x
+           6 = DMX Fixed
+           7 = Apogee Fixed
+           8 = AIL
+           9 = Win9x FM
+          10 = HMI
+          11 = HMI Old
+          12 = MS Adlib
+          13 = IMF Creator
+          14 = O'Connel
 Banks:
            0 = AIL (The Fat Man 2op set, default AIL)
            1 = Bisqwit (selection of 4op and 2op)
@@ -100,13 +117,6 @@ Banks:
           76 = DMX (Strife)
           77 = WOPL (MS-AdLib, Windows 3.x)
           78 = AIL (Monopoly Deluxe)
-          79 = AIL (Monopoly Deluxe)
-     Use banks 2-5 to play Descent "q" soundtracks.
-     Look up the relevant bank number from descent.sng.
-     <numfourops> can be used to specify the number
-     of four-op channels to use. Each four-op channel eats
-     the room of two regular channels. Use as many as required.
-     The Doom & Hexen sets require one or two, while
-     Miles four-op set requires the maximum of numcards*6.
-     When playing Creative Music Files (CMF), try the
-     -p and -v options if it sounds wrong otherwise.
+          79 = WOPL (DMXOPL3 GM)
+          80 = WOPL (DMXOPL3 XG)
+          81 = WOPL (DMXOPL3 GS)

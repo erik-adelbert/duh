@@ -1,3 +1,27 @@
+// duh midi driver for OPL3
+//
+// Based on:
+//   Wohlstand libADLMIDI
+//   bisqwit adlmidi
+//
+// Uses:
+//   sneakernets DMXOPL wopl definitions
+//
+// Original:
+// Copyright (c) 2010-2014 Joel Yliluoma
+// Copyright (c) 2015-2026 Vitaly Novichkov
+//
+// Banks:
+// Copyright (c) 2017 Shannon Freeman
+//
+// Go implementation and modifications:
+// Copyright (C) 2026 Erik Adelbert
+//
+// This software is licensed under the GNU Lesser General Public
+// License, version 2.1 or later.
+//
+// See LICENSE for the complete license text.
+
 package mid
 
 import (
@@ -20,11 +44,11 @@ var Operators = [...]uint16{
 	// Channel 18
 	0x010, 0x013, // operators 12,15
 	// Channel 19
-	0x014, 0xFFF, // operator 16
+	0xFFF, 0x014, // operator 16
 	// Channel 19
 	0x012, 0xFFF, // operator 14
 	// Channel 19
-	0x015, 0xFFF, // operator 17
+	0xFFF, 0x015, // operator 17
 	// Channel 19
 	0x011, 0xFFF, // operator 13
 
@@ -43,7 +67,7 @@ var Operators = [...]uint16{
 var Channels = [...]int{
 	0x000, 0x001, 0x002, 0x003, 0x004, 0x005, 0x006, 0x007, 0x008, // 0..8
 	0x100, 0x101, 0x102, 0x103, 0x104, 0x105, 0x106, 0x107, 0x108, // 9..17 (secondary set)
-	0x006, 0x007, 0x008, 0xFFF, 0xFFF, // <- hw percussions, 0xFFF = no support for pitch/pan
+	0x006, 0x007, 0x008, 0x008, 0x008, // hardware percussion
 }
 
 /*
@@ -69,15 +93,15 @@ var Channels = [...]int{
 */
 
 // Replaces adl[] when a CMF file is loaded
-var DynamicInstruments []ADLData
+var DynamicInstruments []adlData
 
 // Replaces adlins[] when a CMF file is loaded
-var DynamicMetaInstruments []ADLMeta
+var DynamicMetaInstruments []adlMeta
 
 // GetAdlIns returns the ADLData for the given instrument number.
 // If the high bit (DynamicInstrumentTag) is set, the number indexes
 // into DynamicInstruments; otherwise it indexes into the static ADL table.
-func GetAdlIns(id uint16) *ADLData {
+func GetAdlIns(id uint16) *adlData {
 	if has(id, DynamicInstrumentTag) {
 		i := int(id &^ DynamicInstrumentTag)
 
@@ -88,11 +112,11 @@ func GetAdlIns(id uint16) *ADLData {
 		return &DynamicInstruments[i]
 	}
 
-	if int(id) >= len(ADLIns) {
+	if int(id) >= len(adlIns) {
 		return nil
 	}
 
-	return &ADLIns[id]
+	return &adlIns[id]
 }
 
 var (
@@ -162,20 +186,21 @@ type OPL3 struct {
 
 	Cards []*opl3.Device
 
-	QuadOps []int8
+	quads []int8 // QuadOP type for each channel
 
 	ins []uint16 // index to adl[], cached, needed by Touch()
 	pit []uint8  // value poked to B0, cached, needed by NoteOff()
 
 	bds []int
+	cmf bool
 
 	vm     model.Volume
 	master int    // MIDI master volume, set by SysEx
 	mod    []bool // operators' multipliers rewritten by a frequency model
 }
 
-// SetVolumeModel selects the volume and frequency model used by Touch and NoteOn.
-func (o *OPL3) SetVolumeModel(vm model.Volume) {
+// setVolumeModel selects the volume and frequency model used by Touch and NoteOn.
+func (o *OPL3) setVolumeModel(vm model.Volume) {
 	if vm == nil {
 		vm = &model.Generic{}
 	}
@@ -188,7 +213,7 @@ func (o *OPL3) SetMasterVolume(v int) {
 	o.master = v
 }
 
-func NewOPL3(cardCount, quadOpsCount, flags int) *OPL3 {
+func newOPL3(cardCount, quadOpsCount, flags int) *OPL3 {
 	const (
 		ncpc  = 23 // number of channels per OPL3 card
 		perc0 = 18
@@ -208,20 +233,20 @@ func NewOPL3(cardCount, quadOpsCount, flags int) *OPL3 {
 		pit: make([]uint8, nchan),
 		mod: make([]bool, nchan),
 
-		QuadOps: make([]int8, nchan),
+		quads: make([]int8, nchan),
 
 		master: masterVolumeDefault,
 	}
 
-	o.SetVolumeModel(&model.Generic{})
+	o.setVolumeModel(&model.Generic{})
 
 	if has(flags, ModeLogarithmicVolumes) {
-		o.SetVolumeModel(&model.Native{})
+		o.setVolumeModel(&model.Native{})
 	}
 
 	for i := range o.Cards {
 		for j := range 5 {
-			o.QuadOps[i*ncpc+perc0+j] = PercSlave
+			o.quads[i*ncpc+perc0+j] = PercSlave
 		}
 	}
 
@@ -237,11 +262,11 @@ func NewOPL3(cardCount, quadOpsCount, flags int) *OPL3 {
 		o.Cards[i] = opl3.NewDevice(PCMRate)
 
 		for j := range Channels[:18] {
-			o.Poke(i, 0xB0+Channels[j], 0x00)
+			o.poke(i, 0xB0+Channels[j], 0x00)
 		}
 
 		for j := range len(init) / 2 {
-			o.Poke(i, init[2*j], init[2*j+1])
+			o.poke(i, init[2*j], init[2*j+1])
 		}
 
 		if has(flags, ModeHighTremolo) {
@@ -256,30 +281,30 @@ func NewOPL3(cardCount, quadOpsCount, flags int) *OPL3 {
 			o.bds[i] += 0x20
 		}
 
-		o.Poke(i, 0xBD, o.bds[i])
+		o.poke(i, 0xBD, o.bds[i])
 
 		nf := min(nquad, 6)
 		nquad -= nf
 
-		o.Poke(i, 0x104, (1<<nf)-1)
+		o.poke(i, 0x104, (1<<nf)-1)
 	}
 
 	if has(flags, ModeADLPercussion) {
 		for i := range cardCount {
 			for j := range 5 {
-				o.QuadOps[i*ncpc+perc0+j] = int8(j + 3)
+				o.quads[i*ncpc+perc0+j] = int8(j + 3)
 			}
 
 			for j := range 3 {
-				o.QuadOps[i*ncpc+6+j] = PercSlave
+				o.quads[i*ncpc+6+j] = PercSlave
 			}
 		}
 	}
 
 	ii := 0
 	for i := range quadOpsCount {
-		o.QuadOps[ii] = QuadMaster
-		o.QuadOps[ii+3] = QuadSlave
+		o.quads[ii] = QuadMaster
+		o.quads[ii+3] = QuadSlave
 
 		switch i % 6 {
 		case 0, 1, 3, 4:
@@ -291,7 +316,7 @@ func NewOPL3(cardCount, quadOpsCount, flags int) *OPL3 {
 		}
 	}
 
-	o.Silence()
+	o.silence()
 
 	// fmt.Fprintf(os.Stderr, "opl3 CardCount=%d Cards=%d ins=%d QuadOps=%d\n",
 	// 	o.CardCount, len(o.Cards), len(o.ins), len(o.QuadOps))
@@ -299,33 +324,69 @@ func NewOPL3(cardCount, quadOpsCount, flags int) *OPL3 {
 	return o
 }
 
-func (o *OPL3) ChanCount() int {
+func (o *OPL3) chanCount() int {
 	return len(o.ins)
 }
 
-func (o *OPL3) Poke(card, addr, value int) {
+func (o *OPL3) operator(ii, slot int) uint16 {
+	index := 2*ii + slot
+	if o.cmf && ii >= 18 {
+		index += 10
+	}
+	return Operators[index]
+}
+
+func (o *OPL3) setBankMode(setup uint16, rhythm bool) {
+	for card := range o.Cards {
+		o.bds[card] &^= 0xe0
+		if setup&(1<<8) != 0 || has(o.Flags, ModeHighTremolo) {
+			o.bds[card] |= 0x80
+		}
+		if setup&(1<<9) != 0 || has(o.Flags, ModeHighVibrato) {
+			o.bds[card] |= 0x40
+		}
+		if rhythm {
+			o.bds[card] |= 0x20
+		}
+		o.poke(card, 0xBD, o.bds[card])
+		for i := range 3 {
+			o.quads[card*23+6+i] = Regular
+			if rhythm {
+				o.quads[card*23+6+i] = PercSlave
+			}
+		}
+		for i := range 5 {
+			o.quads[card*23+18+i] = PercSlave
+			if rhythm {
+				o.quads[card*23+18+i] = int8(PercBD + i)
+			}
+		}
+	}
+}
+
+func (o *OPL3) poke(card, addr, value int) {
 	data := uint8(value)
 	bank, reg := uint8((addr>>8)&0xF), uint8(addr&0xFF)
 
 	o.Cards[card].WriteRegister(bank, reg, data, true)
 }
 
-func (o *OPL3) NoteOff(c int) {
+func (o *OPL3) noteOff(c int) {
 	card, ii := c/23, c%23
 
 	if ii >= 18 {
 		o.bds[card] &^= 0x10 >> (ii - 18)
 
-		o.Poke(card, 0xBD, o.bds[card])
+		o.poke(card, 0xBD, o.bds[card])
 
 		return
 	}
 
-	o.Poke(card, 0xB0+Channels[ii], int(o.pit[c]&0xDF))
+	o.poke(card, 0xB0+Channels[ii], int(o.pit[c]&0xDF))
 }
 
-// NoteOn keys a channel on at the given tone (MIDI note plus bend, in semitones).
-func (o *OPL3) NoteOn(c int, tone float64) {
+// noteOn keys a channel on at the given tone (MIDI note plus bend, in semitones).
+func (o *OPL3) noteOn(c int, tone float64) {
 	card, ii := c/23, c%23
 
 	tone = max(tone, 0)
@@ -335,6 +396,9 @@ func (o *OPL3) NoteOn(c int, tone float64) {
 	x := int(o.vm.Freq(tone, &off))
 
 	ch := Channels[ii]
+	if o.cmf && ii >= 21 {
+		ch = 0xFFF
+	}
 
 	if ii < 18 {
 		x |= 0x2000
@@ -342,19 +406,17 @@ func (o *OPL3) NoteOn(c int, tone float64) {
 		o.mulOffset(c, int(off))
 	}
 
-	if ii >= 18 {
-		o.bds[card] |= 0x10 >> (ii - 18)
-
-		o.Poke(card, 0xBD, o.bds[card])
-	}
-
 	if ch != 0xFFF {
-		o.Poke(card, 0xA0+ch, x&0xFF)
+		o.poke(card, 0xA0+ch, x&0xFF)
 
 		pit := x >> 8
 
 		o.pit[c] = uint8(pit)
-		o.Poke(card, 0xB0+ch, pit)
+		o.poke(card, 0xB0+ch, pit)
+	}
+	if ii >= 18 {
+		o.bds[card] |= 0x10 >> (ii - 18)
+		o.poke(card, 0xBD, o.bds[card])
 	}
 }
 
@@ -371,7 +433,7 @@ func (o *OPL3) mulOffset(c, offset int) {
 	ops := [2]int{int(ains.ModulatorE862) & 0xFF, int(ains.CarrierE862) & 0xFF}
 
 	for k, v := range ops {
-		addr := int(Operators[2*ii+k])
+		addr := int(o.operator(ii, k))
 		if addr == 0xFFF {
 			continue
 		}
@@ -385,7 +447,7 @@ func (o *OPL3) mulOffset(c, offset int) {
 			v = v&0xF0 | (mul + offset)
 		}
 
-		o.Poke(card, 0x20+addr, v)
+		o.poke(card, 0x20+addr, v)
 	}
 
 	o.mod[c] = offset > 0
@@ -398,7 +460,7 @@ func (o *OPL3) touch(c, vel, vol, exp, bright int, isDrum bool) {
 	ains := GetAdlIns(i)
 
 	mode := model.OPLVoice_MODE_2op_AM
-	switch o.QuadOps[c] {
+	switch o.quads[c] {
 	case Regular, PercBD:
 		mode = int(ains.FeedConn & 1) // 2-op FM or 2-op AM
 	case QuadMaster:
@@ -430,8 +492,8 @@ func (o *OPL3) touch(c, vel, vol, exp, bright int, isDrum bool) {
 
 	card, ii := c/23, c%23
 
-	op0 := Operators[2*ii+0]
-	op1 := Operators[2*ii+1]
+	op0 := o.operator(ii, 0)
+	op1 := o.operator(ii, 1)
 
 	x := int(ains.Modulator40)
 	y := int(ains.Carrier40)
@@ -452,6 +514,19 @@ func (o *OPL3) touch(c, vel, vol, exp, bright int, isDrum bool) {
 
 	o.vm.Volume(&m)
 
+	if isDrum {
+		const drumLoudnessBias = 8 // TL steps; subtracting makes the operator louder
+
+		cur := m.Get(model.OPLCarN)
+		m.Set(model.OPLCarN, max(0, cur-drumLoudnessBias))
+
+		// In additive mode, the modulator is audible too.
+		if ains.FeedConn&1 != 0 {
+			cur = m.Get(model.OPLModN)
+			m.Set(model.OPLModN, max(0, cur-drumLoudnessBias))
+		}
+	}
+
 	if bright != 127 && !isDrum {
 		bright = model.Brightness(bright)
 
@@ -465,40 +540,44 @@ func (o *OPL3) touch(c, vel, vol, exp, bright int, isDrum bool) {
 		}
 	}
 
-	o.Poke(card, 0x40+int(op0), x&0xC0|m.Get(model.OPLModN)&63)
+	if op0 != 0xFFF {
+		o.poke(card, 0x40+int(op0), x&0xC0|m.Get(model.OPLModN)&63)
+	}
 
 	if op1 != 0xFFF {
-		o.Poke(card, 0x40+int(op1), y&0xC0|m.Get(model.OPLCarN)&63)
+		o.poke(card, 0x40+int(op1), y&0xC0|m.Get(model.OPLCarN)&63)
 	}
 }
 
-// Touch updates a channel's levels from its velocity, channel volume,
-// expression and brightness.
-func (o *OPL3) Touch(c, vel, vol, exp, bright int, isDrum bool) {
-	o.touch(c, vel, vol, exp, bright, isDrum)
-}
+// // Touch updates a channel's levels from its velocity, channel volume,
+// // expression and brightness.
+// func (o *OPL3) Touch(c, vel, vol, exp, bright int, isDrum bool) {
+// 	o.touch(c, vel, vol, exp, bright, isDrum)
+// }
 
 // mute sets the maximum attenuation on a channel's operators.
 func (o *OPL3) mute(c int) {
 	card, ii := c/23, c%23
 	ains := GetAdlIns(o.ins[c])
 
-	o.Poke(card, 0x40+int(Operators[2*ii+0]), int(ains.Modulator40)|63)
+	if op0 := o.operator(ii, 0); op0 != 0xFFF {
+		o.poke(card, 0x40+int(op0), int(ains.Modulator40)|63)
+	}
 
-	if op1 := Operators[2*ii+1]; op1 != 0xFFF {
-		o.Poke(card, 0x40+int(op1), int(ains.Carrier40)|63)
+	if op1 := o.operator(ii, 1); op1 != 0xFFF {
+		o.poke(card, 0x40+int(op1), int(ains.Carrier40)|63)
 	}
 }
 
-func (o *OPL3) Patch(c int, i uint16) {
+func (o *OPL3) patch(c int, i uint16) {
 	card, ii := c/23, c%23
 
 	data := [4]int{0x20, 0x60, 0x80, 0xE0}
 
 	o.ins[c] = i
 
-	op0 := int(Operators[2*ii+0])
-	op1 := int(Operators[2*ii+1])
+	op0 := int(o.operator(ii, 0))
+	op1 := int(o.operator(ii, 1))
 
 	ains := GetAdlIns(i)
 
@@ -506,10 +585,12 @@ func (o *OPL3) Patch(c int, i uint16) {
 	car := int(ains.CarrierE862)
 
 	for i := range data {
-		o.Poke(card, data[i]+op0, mod&0xFF)
+		if op0 != 0xFFF {
+			o.poke(card, data[i]+op0, mod&0xFF)
+		}
 
 		if op1 != 0xFFF {
-			o.Poke(card, data[i]+op1, car&0xFF)
+			o.poke(card, data[i]+op1, car&0xFF)
 		}
 
 		mod >>= 8
@@ -517,13 +598,13 @@ func (o *OPL3) Patch(c int, i uint16) {
 	}
 }
 
-// Pan places a channel in the stereo field from a MIDI position (0..127).
+// pan places a channel in the stereo field from a MIDI position (0..127).
 // With soft panning, the channel feeds both sides and the emulator weighs
 // them; otherwise the position is squashed to left, right or both.
-func (o *OPL3) Pan(phys, value int) {
+func (o *OPL3) pan(phys, value int) {
 	card, ii := phys/23, phys%23
 
-	if Channels[ii] == 0xFFF {
+	if ii >= 21 || Channels[ii] == 0xFFF {
 		return
 	}
 
@@ -544,13 +625,13 @@ func (o *OPL3) Pan(phys, value int) {
 		}
 	}
 
-	o.Poke(card, 0xC0+reg, pan|int(GetAdlIns(o.ins[phys]).FeedConn))
+	o.poke(card, 0xC0+reg, pan|int(GetAdlIns(o.ins[phys]).FeedConn))
 }
 
-// Silence all OPL channels.
-func (o *OPL3) Silence() {
+// silence all OPL channels.
+func (o *OPL3) silence() {
 	for i := range o.ins {
-		o.NoteOff(i)
+		o.noteOff(i)
 		o.mute(i)
 	}
 }

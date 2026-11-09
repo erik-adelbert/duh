@@ -24,7 +24,7 @@ import (
 	"github.com/erik-adelbert/duh/internal/tui"
 	"github.com/erik-adelbert/duh/pkg/backend"
 	"github.com/erik-adelbert/duh/pkg/pcm"
-	vgm "github.com/erik-adelbert/duh/pkg/vgmo3"
+	"github.com/erik-adelbert/duh/pkg/vgm"
 	"github.com/erik-adelbert/duh/pkg/xflags"
 )
 

@@ -1,3 +1,27 @@
+// duh midi driver for OPL3
+//
+// Based on:
+//   Wohlstand libADLMIDI
+//   bisqwit adlmidi
+//
+// Uses:
+//   sneakernets DMXOPL wopl definitions
+//
+// Original:
+// Copyright (c) 2010-2014 Joel Yliluoma
+// Copyright (c) 2015-2026 Vitaly Novichkov
+//
+// Banks:
+// Copyright (c) 2017 Shannon Freeman
+//
+// Go implementation and modifications:
+// Copyright (C) 2026 Erik Adelbert
+//
+// This software is licensed under the GNU Lesser General Public
+// License, version 2.1 or later.
+//
+// See LICENSE for the complete license text.
+
 package main
 
 import (
@@ -15,7 +39,7 @@ import (
 	"github.com/erik-adelbert/duh/pkg/opl3"
 )
 
-const cacheMagic = "DUHMIDI-DURATION-CACHE-FILE-V1.0"
+const cacheMagic = "DUHMIDI-DURATION-CACHE-FILE-V2.0"
 
 type Key [10]int32
 
@@ -32,7 +56,8 @@ type KeyInfo struct {
 }
 
 type KeyTimer struct {
-	cache Cache[Key, KeyInfo]
+	cache        Cache[Key, KeyInfo]
+	forceTimings bool
 
 	stats struct {
 		nhit  int
@@ -93,6 +118,7 @@ func (kt *KeyTimer) TimeDB(db *mid.BankDB) {
 				}
 
 				ie.KON, ie.KOFF = info.KON, info.KOFF
+				ie.HasStoredTimings = false
 
 				if info.silent {
 					ie.Flags |= mid.FlagSilence
@@ -102,6 +128,9 @@ func (kt *KeyTimer) TimeDB(db *mid.BankDB) {
 	}
 
 	for _, ie := range db.Ins {
+		if ie.HasStoredTimings && !kt.forceTimings {
+			continue
+		}
 		jobs <- ie
 	}
 	close(jobs)
@@ -141,7 +170,7 @@ func (kt *KeyTimer) loadcache(cache string) error {
 	}
 
 	if string(buf[:]) != cacheMagic {
-		return fmt.Errorf("invalid cache file")
+		return fmt.Errorf("incompatible duration cache %q; use a fresh cache file", cache)
 	}
 
 	var nitem uint32

@@ -1,3 +1,27 @@
+// duh midi driver for OPL3
+//
+// Based on:
+//   Wohlstand libADLMIDI
+//   bisqwit adlmidi
+//
+// Uses:
+//   sneakernets DMXOPL wopl definitions
+//
+// Original:
+// Copyright (c) 2010-2014 Joel Yliluoma
+// Copyright (c) 2015-2026 Vitaly Novichkov
+//
+// Banks:
+// Copyright (c) 2017 Shannon Freeman
+//
+// Go implementation and modifications:
+// Copyright (C) 2026 Erik Adelbert
+//
+// This software is licensed under the GNU Lesser General Public
+// License, version 2.1 or later.
+//
+// See LICENSE for the complete license text.
+
 package mid
 
 import (
@@ -58,7 +82,7 @@ func TestAsTables(t *testing.T) {
 	if len(got.Instruments) != 4 {
 		t.Fatalf("got %d ADL instruments, want 4 (including silent)", len(got.Instruments))
 	}
-	if got.Instruments[1] != (ADLData{
+	if got.Instruments[1] != (adlData{
 		ModulatorE862: 0x11223344,
 		CarrierE862:   0x66778899,
 		Modulator40:   0x55,
@@ -68,10 +92,10 @@ func TestAsTables(t *testing.T) {
 	}) {
 		t.Errorf("2-op instrument = %+v", got.Instruments[1])
 	}
-	if got.Metas[1].ADLID0 != got.Metas[1].ADLID1 || got.Metas[1].VelocityOffset != 3 {
+	if got.Metas[1].ID0 != got.Metas[1].ID1 || got.Metas[1].VelocityOffset != 3 {
 		t.Errorf("2-op meta = %+v, want identical IDs and velocity offset 3", got.Metas[1])
 	}
-	if meta := got.Metas[2]; meta.ADLID0 == meta.ADLID1 ||
+	if meta := got.Metas[2]; meta.ID0 == meta.ID1 ||
 		!Is4Op(meta.Flags) || meta.Tone != 36 ||
 		meta.VelocityOffset != 0 || meta.SecondFinetune != 2 {
 		t.Errorf("pseudo-4op meta = %+v", meta)
@@ -84,7 +108,7 @@ func TestAsTables(t *testing.T) {
 	}
 
 	bank := got.Banks[0]
-	if bank.ID != 7 || bank.Name != "test bank" ||
+	if bank.ID != 7 || bank.name != "test bank" ||
 		bank.Melos[0].Programs[0] != 1 ||
 		bank.Melos[0].Programs[1] != 2 ||
 		bank.Melos[0].Programs[2] != 0 ||
@@ -121,6 +145,7 @@ func TestInstrumentTypeFlags(t *testing.T) {
 		{name: "fixed-note 2op", flags: Flag2op | FlagFixedTone, fourOp: false},
 		{name: "4op", flags: Flag4op, fourOp: true},
 		{name: "pseudo-4op", flags: FlagPseudo4op, fourOp: true, pseudoFourOp: true},
+		{name: "combined pseudo-4op", flags: Flag4op | FlagPseudo4op, fourOp: true, pseudoFourOp: true},
 		{name: "fixed-note pseudo-4op", flags: FlagPseudo4op | FlagFixedTone, fourOp: true, pseudoFourOp: true},
 	}
 
@@ -137,37 +162,62 @@ func TestInstrumentTypeFlags(t *testing.T) {
 }
 
 func TestBuiltinADLDatabaseLoads(t *testing.T) {
-	if builtinErr != nil {
-		t.Fatal(builtinErr)
+	if ErrBuiltin != nil {
+		t.Fatal(ErrBuiltin)
 	}
-	if len(Banks) == 0 || len(ADLMetas) == 0 || len(ADLIns) == 0 {
+	if len(banks) == 0 || len(adlMetas) == 0 || len(adlIns) == 0 {
 		t.Fatalf("built-in tables are empty: %d banks, %d metas, %d instruments",
-			len(Banks), len(ADLMetas), len(ADLIns))
+			len(banks), len(adlMetas), len(adlIns))
 	}
-	if len(Banks[0].Melos) == 0 {
+	if len(banks[0].Melos) == 0 {
 		t.Fatal("first built-in bank has no melodic MIDI bank")
 	}
 }
 
+func TestBuiltinGENMIDIPseudoFourOp(t *testing.T) {
+	for _, bank := range banks {
+		if bank.name != "WOPL (GENMIDI)" {
+			continue
+		}
+		if bank.Setup != VolLinear {
+			t.Errorf("GENMIDI setup = %#x, want generic volume and shallow modulation", bank.Setup)
+		}
+		if len(bank.Melos) == 0 {
+			t.Fatal("GENMIDI has no melodic bank")
+		}
+		for _, id := range bank.Melos[0].Programs {
+			if int(id) >= len(adlMetas) {
+				t.Fatalf("invalid meta ID %d", id)
+			}
+			meta := adlMetas[id]
+			if IsPseudo4Op(meta.Flags) && meta.ID0 != meta.ID1 {
+				return
+			}
+		}
+		t.Fatal("GENMIDI has no two-voice pseudo-4op patches")
+	}
+	t.Fatal("built-in GENMIDI bank not found")
+}
+
 func TestBuiltinBank38UsesWOPLXDrumKey(t *testing.T) {
 	const bankIndex = 38
-	if bankIndex >= len(Banks) {
+	if bankIndex >= len(banks) {
 		t.Fatalf("built-in bank %d is missing", bankIndex)
 	}
 
-	bank := Banks[bankIndex]
-	if bank.Name != "AIL (SimFarm, SimHealth) :4op:" {
-		t.Fatalf("bank %d = %q, want SimFarm/SimHealth 4-op bank", bankIndex, bank.Name)
+	bank := banks[bankIndex]
+	if bank.name != "AIL (SimFarm, SimHealth) :4op:" {
+		t.Fatalf("bank %d = %q, want SimFarm/SimHealth 4-op bank", bankIndex, bank.name)
 	}
 	if len(bank.Drums) == 0 {
 		t.Fatal("bank 38 has no percussion MIDI bank")
 	}
 
 	metaID := bank.Drums[0].Programs[38]
-	if metaID == 0 || int(metaID) >= len(ADLMetas) {
+	if metaID == 0 || int(metaID) >= len(adlMetas) {
 		t.Fatalf("bank 38 percussion patch 38 has invalid meta ID %d", metaID)
 	}
-	if got := ADLMetas[metaID].Tone; got != 48 {
+	if got := adlMetas[metaID].Tone; got != 48 {
 		t.Errorf("bank 38 percussion patch 38 fixed tone = %d, want DRUM_KEY 48", got)
 	}
 }
@@ -188,8 +238,8 @@ func TestAsTablesRejectsBrokenReferences(t *testing.T) {
 }
 
 func TestGetAdlMetaIDUsesDerivedMidiBanks(t *testing.T) {
-	oldBanks := Banks
-	defer func() { Banks = oldBanks }()
+	oldBanks := banks
+	defer func() { banks = oldBanks }()
 
 	defaultMelodic := ADLMidiBank{}
 	defaultMelodic.Programs[0] = 4
@@ -197,16 +247,16 @@ func TestGetAdlMetaIDUsesDerivedMidiBanks(t *testing.T) {
 	selectedMelodic.Programs[0] = 7
 	drumBank := ADLMidiBank{}
 	drumBank.Programs[36] = 9
-	Banks = []ADLBank{{
+	banks = []adlBank{{
 		Melos: []ADLMidiBank{defaultMelodic, selectedMelodic},
 		Drums: []ADLMidiBank{drumBank},
 	}}
 
-	decoder := &MIDIDecoder{adlBank: 0}
+	decoder := &Synth{bank: 0}
 	if got := decoder.GetAdlMetaID(0, nil); got != 4 {
 		t.Errorf("default melodic meta ID = %d, want 4", got)
 	}
-	channel := &Channel{BankSelected: true, Bank: Bank{MSB: 3, LSB: 2}}
+	channel := &midiChan{hasBank: true, bank: bank{MSB: 3, LSB: 2}}
 	if got := decoder.GetAdlMetaID(0, channel); got != 7 {
 		t.Errorf("selected melodic meta ID = %d, want 7", got)
 	}

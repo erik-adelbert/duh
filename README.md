@@ -25,6 +25,24 @@ The first tag (`v0.1.0`) will land once the core path is settled. Until then, `m
 
 [Read the blog](https://erik-adelbert.github.io/duh/)
 
+## MIDI playback
+
+`mid.Decode` accepts an `io.Reader` and provides seekable signed 16-bit stereo
+PCM at 49716 Hz. It scans the sequence to calculate the one-pass size and
+duration, including one second of audio after the sequence ends. Held notes
+continue sounding during that tail. `DecoderOptions` configures the OPL synth
+and optional loop-marker playback; size and duration still describe one
+non-looping pass. Seeking re-renders from the start and can be slow.
+A `loopEnd` marker ends the non-looping pass; while looping, seeking follows
+the loop rather than the one-pass tail.
+
+`pkg/mid` also separates file sequencing from OPL synthesis. `NewMIDIPlayer`
+combines both for file playback: select a device, open a file, and call
+`Tick` as audio is rendered. For live MIDI, `NewSynth` can receive MIDI events
+independently after `DeviceSelect`; call `Advance` as time elapses.
+`NewSequencer` connects a file sequencer to an existing synth. Its `Tick`
+only schedules events, so the caller is responsible for advancing the synth.
+
 ## Goals
 
 - **Pure Go.** `CGO_ENABLED=0` should always build and pass tests.

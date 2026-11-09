@@ -1,3 +1,27 @@
+// duh midi driver for OPL3
+//
+// Based on:
+//   Wohlstand libADLMIDI
+//   bisqwit adlmidi
+//
+// Uses:
+//   sneakernets DMXOPL wopl definitions
+//
+// Original:
+// Copyright (c) 2010-2014 Joel Yliluoma
+// Copyright (c) 2015-2026 Vitaly Novichkov
+//
+// Banks:
+// Copyright (c) 2017 Shannon Freeman
+//
+// Go implementation and modifications:
+// Copyright (C) 2026 Erik Adelbert
+//
+// This software is licensed under the GNU Lesser General Public
+// License, version 2.1 or later.
+//
+// See LICENSE for the complete license text.
+
 package main
 
 import (
@@ -11,11 +35,6 @@ import (
 
 func main() {
 	a := getArgs()
-
-	if a.config == "" || a.output == "" {
-		flag.Usage()
-		os.Exit(2)
-	}
 
 	if a.download {
 		DownloadFMBanks()
@@ -32,6 +51,15 @@ func main() {
 		}
 	}
 
+	if a.config == "" || a.output == "" {
+		if a.download {
+			return
+		}
+
+		flag.Usage()
+		os.Exit(2)
+	}
+
 	err := cfg.Open(a.config)
 
 	if err != nil {
@@ -44,6 +72,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error creating key timer: %v\n", err)
 		os.Exit(1)
 	}
+	timer.forceTimings = a.forceTimings
 	defer timer.Close()
 
 	ctrlc, stop := sighandle(os.Interrupt, syscall.SIGTERM)
@@ -86,7 +115,8 @@ type args struct {
 	config string
 	output string
 
-	download bool
+	download     bool
+	forceTimings bool
 }
 
 func getArgs() args {
@@ -99,7 +129,8 @@ type flags struct {
 	config *string
 	output *string
 
-	download *bool
+	download     *bool
+	forceTimings *bool
 }
 
 func parseFlags() flags {
@@ -112,11 +143,12 @@ func parseFlags() flags {
 	}
 
 	fs := flags{
-		ini:      flag.String("ini", "", "Path to ini file to convert to config"),
-		cache:    flag.String("cache", "", "Path to cache file"),
-		config:   flag.String("c", "", "Path to config file"),
-		output:   flag.String("o", "adlmidi.dat", "Path to output file"),
-		download: flag.Bool("download", false, "Download FM banks from github"),
+		ini:          flag.String("ini", "", "Path to ini file to convert to config"),
+		cache:        flag.String("cache", "", "Path to cache file"),
+		config:       flag.String("c", "", "Path to config file"),
+		output:       flag.String("o", "adlmidi.dat", "Path to output file"),
+		download:     flag.Bool("download", false, "Download FM banks from github"),
+		forceTimings: flag.Bool("force-timings", false, "Recompute WOPL v3 timings and detect silent instruments"),
 	}
 
 	flag.Parse()
@@ -126,11 +158,12 @@ func parseFlags() flags {
 
 func (f flags) flatten() args {
 	return args{
-		ini:      *f.ini,
-		cache:    *f.cache,
-		config:   *f.config,
-		output:   *f.output,
-		download: *f.download,
+		ini:          *f.ini,
+		cache:        *f.cache,
+		config:       *f.config,
+		output:       *f.output,
+		download:     *f.download,
+		forceTimings: *f.forceTimings,
 	}
 }
 

@@ -6,7 +6,7 @@
 // The main use case is to read VGM files and stream the commands to an adhoc OPL3 device for playback.
 // The package is designed to be used in conjunction with duh's opl3 package, which provides an
 // implementation of the OPL3 sound chip.
-package vgmo3
+package vgm
 
 import (
 	"fmt"

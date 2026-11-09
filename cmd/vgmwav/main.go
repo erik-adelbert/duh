@@ -12,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	vgm "github.com/erik-adelbert/duh/pkg/vgmo3"
+	"github.com/erik-adelbert/duh/pkg/vgm"
 	"github.com/erik-adelbert/duh/pkg/wav"
 	"github.com/erik-adelbert/duh/pkg/xflags"
 )
