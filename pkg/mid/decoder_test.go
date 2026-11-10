@@ -54,7 +54,7 @@ func TestDecoderReadSeekAndDuration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Format().String() != "s16c2r49716" {
+	if d.Format().String() != "s16c2r48000" {
 		t.Fatalf("format %v", d.Format())
 	}
 	if d.Duration() != 1500*time.Millisecond || d.Size() != 3*PCMRate*2 {

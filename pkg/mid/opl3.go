@@ -148,7 +148,7 @@ func has[T constraints.Integer](flags, mode T) bool {
 }
 
 const (
-	PCMRate = 49716
+	PCMRate = 48000
 	OPLBase = 0x388
 )
 

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css">
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      overflow: hidden;
+    }
+
+    #terminal {
+      width: 84ch;
+      height: 56em;
+    }
+  </style>
+
+  <script src="wasm_exec.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.19.0/lib/addon-webgl.js"></script>
+</head>
+
+<body>
+  <div id="terminal"></div>
+
+  <script>
+    const SAMPLE_RATE = 44100;
+    let audioContext;
+    let audioNode;
+    let audioReady;
+
+    async function initAudio() {
+      if (audioReady) return audioReady;
+
+      audioReady = (async () => {
+        audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
+
+        await audioContext.audioWorklet.addModule("pcm-worklet.js");
+
+        audioNode = new AudioWorkletNode(audioContext, "pcm-player", {
+          numberOfInputs: 0,
+          numberOfOutputs: 1,
+          outputChannelCount: [2]
+        });
+
+        audioNode.connect(audioContext.destination);
+        await audioContext.resume();
+      })();
+
+      return audioReady;
+    }
+
+    globalThis.writeAudio = bytes => {
+      if (!audioNode) return;
+      audioNode.port.postMessage(bytes, [bytes.buffer]);
+    };
+
+    const term = new Terminal({
+      cols: 84,
+      rows: 50,
+      cursorBlink: false,
+      convertEol: true,
+      scrollback: 0,
+      fontFamily: '"JetBrains Mono", "DejaVu Sans Mono", monospace',
+      fontSize: 13,
+      lineHeight: 1.1
+    });
+
+    term.open(document.getElementById("terminal"));
+
+    try {
+      term.loadAddon(new WebglAddon.WebglAddon());
+    } catch {
+      // do nothing, xterm uses the canvas/DOM engine
+    }
+
+    globalThis.renderScreen = screen => term.write(screen);
+
+    globalThis.renderError = error => {
+      console.error(error);
+      term.write(`\r\n\x1b[31m${error}\x1b[0m\r\n`);
+    };
+
+    globalThis.playbackEnded = () => {
+      parent.postMessage({ type: "playback-ended" }, "*");
+    };
+
+    window.addEventListener("message", async event => {
+      if (event.data?.type !== "play") return;
+
+      try {
+        document.title = event.data.name || "duh midweb";
+
+        await initAudio();
+
+        term.clear();
+        term.write("\x1b[2J\x1b[H");
+
+        const result = globalThis.run(
+          new Uint8Array(event.data.data)
+        );
+
+        if (result) renderError(result);
+      } catch (error) {
+        renderError(error);
+      }
+    });
+
+    const go = new Go();
+
+    WebAssembly.instantiateStreaming(
+      fetch("midweb.wasm"),
+      go.importObject
+    )
+      .then(({ instance }) => go.run(instance))
+      .catch(error => {
+        renderError(`Failed to load WASM:\r\n${error}`);
+      });
+  </script>
+</body>
+</html>

@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	MaxSourceSize = 10 * 1024 * 1024
+	MaxSourceSize = 10 * MB
 	MaxCards      = 4
 )
 
@@ -112,18 +112,16 @@ func defaultFourOps(nquad, total uint, ncard int) int {
 }
 
 func run(screen Printer, audio *JSOut, in *mid.Decoder) error {
-	ui, err := mktui(in)
-	if err != nil {
-		return err
-	}
+	src, ui := mktui(in)
 	defer ui.Stop()
 
 	quit := make(chan struct{})
 	done := make(chan error, 1)
+
 	go func() {
-		err := play(in, audio, ui.feed)
-		ui.feed.Close()
+		err := play(src, audio)
 		close(quit)
+
 		done <- err
 	}()
 
@@ -134,134 +132,113 @@ func run(screen Printer, audio *JSOut, in *mid.Decoder) error {
 }
 
 type webtui struct {
-	duration   string
-	meterWidth int
-	tap        *pcm.Tap
-	feed       *delayLine
-	sp         tui.Spectro
-	vbL        tui.VuBar
-	vbR        tui.VuBar
+	duration string
+
+	tap *pcm.Tap
+
+	// feed *delayLine
+
+	sp  tui.Spectro
+	vbL tui.VuBar
+	vbR tui.VuBar
 }
 
-func mktui(in *mid.Decoder) (*webtui, error) {
+func mktui(in *mid.Decoder) (io.Reader, *webtui) {
 	const (
-		minHz  = 50
-		maxHz  = 20_000
-		window = 2048
+		BandCount = 64
+		MinHz     = 50
+		MaxHz     = 20_000
+		Window    = 2048
 	)
 
-	columns := 84
-	if getColumns := js.Global().Get("terminalColumns"); getColumns.Type() == js.TypeFunction {
-		columns = getColumns.Invoke().Int()
-	}
-	meterWidth := min(40, max(20, columns-10))
-	bandCount := min(64, max(24, columns-8))
+	var (
+		err error
 
-	sp, err := tui.NewSpectro(mid.PCMRate, minHz, maxHz, bandCount, false)
+		sp       tui.Spectro
+		vbL, vbR tui.VuBar
+	)
+
+	var src io.Reader = in
+
+	sp, err = tui.NewSpectro(mid.PCMRate, MinHz, MaxHz, BandCount, false)
+
 	if err != nil {
-		return nil, err
+		return in, nil
 	}
 
-	tap, err := pcm.NewTap(in.Format(), 500*time.Millisecond, window, mid.PCMRate/30)
-	if err != nil {
-		return nil, err
-	}
-	vbL, vbR := tui.NewVuBar(), tui.NewVuBar()
+	vbL, vbR = tui.NewVuBar(), tui.NewVuBar()
+
+	const (
+		WindowSize     = 2048
+		HopSize        = 1470
+		BufferDuration = 500 * ms
+	)
+
+	tap, _ := pcm.NewTap(in.Format(), BufferDuration, Window, HopSize)
+
 	tap.UpdateFunc(func(samples []float64, nchan int) {
 		for i := 0; i < len(samples); i += nchan {
 			left := samples[i]
 			right := left
-			if nchan > 1 {
+
+			if nchan == 2 {
 				right = samples[i+1]
 			}
+
 			sp.Addf64((left + right) / 2)
+
 			vbL.Addf64(left)
 			vbR.Addf64(right)
 		}
 	})
 	tap.Start()
 
-	return &webtui{
-		duration:   tui.TimerString(in.Duration()),
-		meterWidth: meterWidth,
-		tap:        tap,
-		feed:       newDelayLine(tap, audioLatency),
-		sp:         sp,
-		vbL:        vbL,
-		vbR:        vbR,
-	}, nil
+	src = io.TeeReader(in, tap)
+
+	return src, &webtui{
+		duration: tui.TimerString(in.Duration()),
+
+		tap: tap,
+
+		sp:  sp,
+		vbL: vbL,
+		vbR: vbR,
+	}
 }
 
 func (w *webtui) Stop() { w.tap.Stop() }
 
-// audioLatency is the browser's reported delay between handing PCM to the audio graph and hearing it.
-func audioLatency() time.Duration {
-	return time.Duration(js.Global().Call("audioLatency").Float() * float64(time.Second))
-}
+func play(in io.Reader, audio *JSOut) error {
+	buf := make([]byte, 16*1024)
 
-// delayLine replays PCM to sink after the audio output latency so the display matches what is heard.
-type delayLine struct {
-	sink  io.Writer
-	delay func() time.Duration
-	queue chan delayedChunk
-	done  chan struct{}
-}
+	const (
+		sampleRate    = 48000
+		bytesPerFrame = 4 // stereo s16le
+	)
 
-type delayedChunk struct {
-	due  time.Time
-	data []byte
-}
+	var naudio int64
 
-func newDelayLine(sink io.Writer, delay func() time.Duration) *delayLine {
-	d := &delayLine{
-		sink:  sink,
-		delay: delay,
-		queue: make(chan delayedChunk, 256),
-		done:  make(chan struct{}),
-	}
-	go d.run()
-	return d
-}
-
-func (d *delayLine) Write(p []byte) (int, error) {
-	d.queue <- delayedChunk{due: time.Now().Add(d.delay()), data: bytes.Clone(p)}
-	return len(p), nil
-}
-
-func (d *delayLine) run() {
-	defer close(d.done)
-	for chunk := range d.queue {
-		time.Sleep(time.Until(chunk.due))
-		_, _ = d.sink.Write(chunk.data)
-	}
-}
-
-// Close waits until every queued chunk has reached the sink.
-func (d *delayLine) Close() {
-	close(d.queue)
-	<-d.done
-}
-
-func play(in io.Reader, audio *JSOut, feed io.Writer) error {
-	buf := make([]byte, 4*1024)
-	const bytesPerFrame = 4 // stereo s16le
-	bytesPerSecond := int64(mid.PCMRate * bytesPerFrame)
-	var bytesPlayed int64
 	start := time.Now()
+
+	bps := int64(sampleRate * bytesPerFrame)
 
 	for {
 		n, err := in.Read(buf)
+
 		if n > 0 {
-			if _, writeErr := audio.Write(buf[:n]); writeErr != nil {
-				return writeErr
+			if _, err := audio.Write(buf[:n]); err != nil {
+				return err
 			}
-			_, _ = feed.Write(buf[:n])
-			bytesPlayed += int64(n)
-			target := time.Duration(bytesPlayed * int64(time.Second) / bytesPerSecond)
+
+			naudio += int64(n)
+
+			target := time.Duration(naudio * int64(time.Second) / bps)
+
 			if wait := target - time.Since(start); wait > 2*time.Millisecond {
 				time.Sleep(wait)
 			}
 		}
+
 		switch err {
 		case nil:
 		case io.EOF:
@@ -274,20 +251,32 @@ func play(in io.Reader, audio *JSOut, feed io.Writer) error {
 
 func display(screen Printer, w *webtui, quit <-chan struct{}) error {
 	const (
-		fps        = 30
-		leftMargin = 2
+		FPS        = 30
+		LeftMargin = 2
 	)
-	vsync := time.NewTicker(time.Second / fps)
+
+	vsync := time.NewTicker(time.Second / FPS)
 	defer vsync.Stop()
+
 	housekeep := time.NewTicker(10 * time.Millisecond)
 	defer housekeep.Stop()
+
 	altScreen(screen, true)
 	defer altScreen(screen, false)
 
-	pads := tui.Mkpad(leftMargin)
-	var sb strings.Builder
-	sb.Grow(4 * 1024)
 	started := time.Now()
+
+	var (
+		title = "duh midweb\n\n"
+
+		pads = tui.Mkpad(LeftMargin)
+
+		sb strings.Builder
+	)
+
+	const FrameSz = 4 * 1024
+
+	sb.Grow(FrameSz)
 
 	for {
 		select {
@@ -295,15 +284,26 @@ func display(screen Printer, w *webtui, quit <-chan struct{}) error {
 			return nil
 		case <-vsync.C:
 			sb.Reset()
+
+			const WidgetWidth = 40
+
 			sb.WriteString(tui.ANSICLS)
-			fmt.Fprintf(&sb, "%s\n  duh midweb\n\n", pads)
+
+			fmt.Fprintf(&sb, "%s\n  %s\n", pads, title)
+
 			_, _ = w.sp.FRender(&sb, pads)
+
 			sb.WriteString("\n  L ")
-			w.vbL.Frender(&sb, w.meterWidth)
+			w.vbL.Frender(&sb, WidgetWidth)
 			sb.WriteString("\n  R ")
-			w.vbR.Frender(&sb, w.meterWidth)
+			w.vbR.Frender(&sb, WidgetWidth)
 			sb.WriteString("\n  -36dB\n\n")
-			fmt.Fprintf(&sb, "%s%s / %s\n", pads, tui.TimerString(time.Since(started)), w.duration)
+
+			elapsed := time.Since(started)
+
+			fmt.Fprintf(&sb, "%s%s / %s", pads, tui.TimerString(elapsed), w.duration)
+			sb.WriteString(tui.Green("x1\n"))
+
 			screen(sb.String())
 		case now := <-housekeep.C:
 			w.vbL.Tick(now)
@@ -327,6 +327,13 @@ func NewJSOut() *JSOut { return &JSOut{write: js.Global().Get("writeAudio")} }
 func (o *JSOut) Write(p []byte) (int, error) {
 	buf := js.Global().Get("Uint8Array").New(len(p))
 	js.CopyBytesToJS(buf, p)
+
 	o.write.Invoke(buf)
+
 	return len(p), nil
 }
+
+const (
+	MB = 1024 * 1024
+	ms = time.Millisecond
+)

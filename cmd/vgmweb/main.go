@@ -153,15 +153,11 @@ func mktui(in *vgm.Decoder) (io.Reader, *webtui) {
 
 	// Set up the tap's update function to feed the analyzers
 	tap.UpdateFunc(func(samples []float64, nchan int) {
-		var left, right float64
-
 		for i := 0; i < len(samples); i += nchan {
-			switch nchan {
-			case 1:
-				left = samples[i]
-				right = left
-			case 2:
-				left = samples[i]
+			left := samples[i]
+			right := left
+
+			if nchan == 2 {
 				right = samples[i+1]
 			}
 
@@ -189,9 +185,7 @@ func mktui(in *vgm.Decoder) (io.Reader, *webtui) {
 	}
 }
 
-func (w *webtui) Stop() {
-	w.tap.Stop()
-}
+func (w *webtui) Stop() { w.tap.Stop() }
 
 func play(in io.Reader, audio *JSOut) (err error) {
 	buf := make([]byte, 16*1024)
@@ -246,20 +240,16 @@ func display(screen Printer, w *webtui, quit chan struct{}) (err error) {
 	opl3 := w.opl3
 	OPL3Regs := w.regs
 
-	duration := w.duration
-
 	started := time.Now()
 
 	// Launch the frame ticker
 	const (
 		FPS        = 30
-		leftMargin = 2
+		LeftMargin = 2
 	)
 
-	vsync := time.Second / FPS
-
-	vsyncer := time.NewTicker(vsync)
-	defer vsyncer.Stop()
+	vsync := time.NewTicker(time.Second / FPS)
+	defer vsync.Stop()
 
 	// Launch the housekeep ticker
 	housekeep := time.NewTicker(10 * ms)
@@ -273,7 +263,7 @@ func display(screen Printer, w *webtui, quit chan struct{}) (err error) {
 	var (
 		title = "duh vgmweb\n\n"
 
-		pads = tui.Mkpad(leftMargin)
+		pads = tui.Mkpad(LeftMargin)
 
 		sb strings.Builder
 	)
@@ -288,7 +278,7 @@ func display(screen Printer, w *webtui, quit chan struct{}) (err error) {
 		select {
 		case <-quit: // Exit the display loop
 			return nil
-		case <-vsyncer.C: // Draw a frame
+		case <-vsync.C: // Draw a frame
 			sb.Reset()
 
 			const WidgetWidth = 40
@@ -309,16 +299,14 @@ func display(screen Printer, w *webtui, quit chan struct{}) (err error) {
 
 			elapsed := time.Since(started)
 
-			fmt.Fprintf(&sb, "%s%s / %s", pads, tui.TimerString(elapsed), duration)
+			fmt.Fprintf(&sb, "%s%s / %s", pads, tui.TimerString(elapsed), w.duration)
 
 			sb.WriteString(tui.Green("x1\n"))
 
 			OPL3Regs.Render(&sb, pads)
 
 			screen(sb.String())
-		case <-housekeep.C: // Housekeeping tasks
-			now := time.Now()
-
+		case now := <-housekeep.C: // Housekeeping tasks
 			vbL.Tick(now)
 			vbR.Tick(now)
 

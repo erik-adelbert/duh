@@ -3,8 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <meta name="theme-color" content="#000000">
   <title>duh midweb</title>
+
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96" />
+  <link rel="shortcut icon" href="favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+  <link rel="manifest" href="site.webmanifest" />
+
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css">
   <script src="wasm_exec.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
@@ -15,6 +23,7 @@
       padding: 0;
       background: #000;
       font-family: monospace;
+      color: #ddd;
     }
 
     #controls {
@@ -22,36 +31,49 @@
     }
 
     #buttons {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
     #midi-file {
-        display: none; /* ensure hidden input doesn't affect flex layout */
+      display: none; /* ensure hidden input doesn't affect flex layout */
+    }
+
+    /* Everything in the row shares one box model, font, and height. */
+    #buttons > * {
+      box-sizing: border-box;
+      font: inherit;
+      height: 28px;
     }
 
     #bank-control {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        height: 28px; /* match button height so baseline aligns */
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
 
     #bank {
-        width: 42ch;
-        height: 28px;
-        box-sizing: border-box;
+      width: 28ch;
+      max-width: 50vw;
+      padding: 0 6px;
+      border: 1px solid #555;
+      border-radius: 3px;
+      background: #111;
+      color: #ddd;
     }
 
     button {
-        height: 28px;
-        width: 120px;
-        padding: 4px 4px;
-        box-sizing: border-box;
+      padding: 0 12px;
+      border: 1px solid #555;
+      border-radius: 3px;
+      background: #222;
+      color: #ddd;
+      cursor: pointer;
     }
-    button:disabled, select:disabled { opacity: .45; }
+
+    button:disabled, select:disabled { opacity: .45; cursor: default; }
 
     #info {
       margin-top: 6px;
@@ -81,14 +103,14 @@
     </div>
     <div id="info">
         <span id="status">Choose a MIDI file and instrument bank.</span><br>
-        <span id="file-name">No file selected</span><span> / PCM 49.716 kHz stereo</span>
+        <span id="file-name">No file selected</span><span> / PCM 48.000 kHz stereo</span>
     </div>
   </div>
 
   <div id="terminal" aria-label="Spectrogram and stereo VU meters"></div>
 
   <script>
-    const SOURCE_RATE = 49716;
+    const SOURCE_RATE = 48000;
     const MAX_FILE_SIZE = 10 * 1024 * 1024;
     const fileInput = document.getElementById("midi-file");
     const chooseButton = document.getElementById("choose");

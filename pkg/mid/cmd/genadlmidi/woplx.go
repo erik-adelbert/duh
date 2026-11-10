@@ -203,6 +203,7 @@ func (x xins) Attrs(ie *mid.InsEntry) {
 	ie.DrumKey = uint8(x.attrs["DRUM_KEY"])
 	ie.KON = time.Duration(x.attrs["KON"]) * time.Millisecond
 	ie.KOFF = time.Duration(x.attrs["KOFF"]) * time.Millisecond
+	ie.HasStoredTimings = true
 }
 
 func parseBank(path string) (*xbank, error) {

@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#000000">
+  <title>duh vgmweb</title>
+
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="icon" type="image/png" href="favicon-96x96.png" sizes="96x96" />
   <link rel="shortcut icon" href="favicon.ico" />
@@ -12,8 +15,10 @@
   <style>
     html, body {
       margin: 0;
+      padding: 0;
       background: #000;
       font-family: monospace;
+      color: #ddd;
     }
 
     #controls {
@@ -22,15 +27,30 @@
 
     #buttons {
       display: flex;
+      align-items: center;
       gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* Everything in the row shares one box model, font, and height. */
+    #buttons > * {
+      box-sizing: border-box;
+      font: inherit;
+      height: 28px;
     }
 
     button {
-      padding: 4px 12px;
+      padding: 0 12px;
+      border: 1px solid #555;
+      border-radius: 3px;
+      background: #222;
+      color: #ddd;
+      cursor: pointer;
     }
 
     button:disabled {
       opacity: .45;
+      cursor: default;
     }
 
     #info {
