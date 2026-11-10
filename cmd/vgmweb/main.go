@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"runtime"
 	"strings"
 	"syscall/js"
 	"time"
@@ -51,7 +52,7 @@ func run(screen Printer, audio *JSOut, in *vgm.Decoder) error {
 		done <- err
 	}()
 
-	if err := display(screen, ui, quit); err != nil {
+	if err := display(screen, ui, quit, audio); err != nil {
 		return err
 	}
 
@@ -71,9 +72,12 @@ func main() {
 			in, err := vgm.Decode(bytes.NewReader(buf), int64(len(buf)))
 			if err != nil {
 				js.Global().Call("renderError", err.Error())
+				js.Global().Call("playbackEnded")
 				return
 			}
 			defer in.Close() //nolint:errcheck
+
+			js.Global().Call("playbackStarted")
 
 			err = run(
 				func(screen string) {
@@ -197,7 +201,7 @@ func play(in io.Reader, audio *JSOut) (err error) {
 
 	var naudio int64
 
-	start := time.Now()
+	start := audio.Elapsed()
 
 	bps := int64(sampleRate * bytesPerFrame)
 
@@ -217,8 +221,10 @@ func play(in io.Reader, audio *JSOut) (err error) {
 			 */
 			target := time.Duration(naudio * int64(time.Second) / bps)
 
-			if wait := target - time.Since(start); wait > 2*time.Millisecond {
+			if wait := target - (audio.Elapsed() - start); wait > 2*time.Millisecond {
 				time.Sleep(wait)
+			} else {
+				runtime.Gosched()
 			}
 		}
 
@@ -232,15 +238,13 @@ func play(in io.Reader, audio *JSOut) (err error) {
 	}
 }
 
-func display(screen Printer, w *webtui, quit chan struct{}) (err error) {
+func display(screen Printer, w *webtui, quit chan struct{}, audio *JSOut) (err error) {
 	sp := w.sp
 	vbL := w.vbL
 	vbR := w.vbR
 
 	opl3 := w.opl3
 	OPL3Regs := w.regs
-
-	started := time.Now()
 
 	// Launch the frame ticker
 	const (
@@ -297,9 +301,7 @@ func display(screen Printer, w *webtui, quit chan struct{}) (err error) {
 			sb.WriteString("-36dB")
 			sb.WriteString("\n\n")
 
-			elapsed := time.Since(started)
-
-			fmt.Fprintf(&sb, "%s%s / %s", pads, tui.TimerString(elapsed), w.duration)
+			fmt.Fprintf(&sb, "%s%s / %s", pads, tui.TimerString(audio.Elapsed()), w.duration)
 
 			sb.WriteString(tui.Green("x1\n"))
 
@@ -336,6 +338,10 @@ func NewJSOut() *JSOut {
 	return &JSOut{
 		write: js.Global().Get("writeAudio"),
 	}
+}
+
+func (o *JSOut) Elapsed() time.Duration {
+	return time.Duration(js.Global().Call("playbackTime").Float() * float64(time.Second))
 }
 
 func (o *JSOut) Write(p []byte) (int, error) {

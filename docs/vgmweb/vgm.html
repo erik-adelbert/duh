@@ -31,15 +31,69 @@
 
   <script>
     const SAMPLE_RATE = 44100;
-    let audioContext;
-    let audioNode;
-    let audioReady;
+    let audioContext = null;
+    let audioNode = null;
+    let audioReady = null;
+    let playbackStartTime = 0;
+    let audioBlocked = false;
+    let gestureUnlock = null;
+
+    const post = message => parent.postMessage(message, "*");
+
+    async function unlockAudio() {
+      if (!audioContext) return false;
+      if (audioContext.state === "running") return true;
+      try {
+        await audioContext.resume();
+      } catch (err) {
+        console.warn("resume() failed", err);
+      }
+      return audioContext.state === "running";
+    }
+
+    function setAudioBlocked() {
+      if (!audioBlocked) {
+        audioBlocked = true;
+        post({ type: "audio-blocked" });
+      }
+      installGestureUnlock();
+    }
+
+    function setAudioUnlocked() {
+      if (gestureUnlock) {
+        document.removeEventListener("pointerdown", gestureUnlock, true);
+        document.removeEventListener("keydown", gestureUnlock, true);
+        gestureUnlock = null;
+      }
+      if (audioBlocked) {
+        audioBlocked = false;
+        post({ type: "audio-unlocked" });
+      }
+    }
+
+    function installGestureUnlock() {
+      if (!audioContext || audioContext.state === "running" || gestureUnlock) return;
+      gestureUnlock = async () => {
+        if (await unlockAudio()) setAudioUnlocked();
+      };
+      document.addEventListener("pointerdown", gestureUnlock, true);
+      document.addEventListener("keydown", gestureUnlock, true);
+    }
 
     async function initAudio() {
       if (audioReady) return audioReady;
 
       audioReady = (async () => {
+        if (navigator.audioSession) navigator.audioSession.type = "playback";
+
         audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
+        audioContext.addEventListener("statechange", () => {
+          if (audioContext.state === "suspended") {
+            setAudioBlocked();
+          } else if (audioContext.state === "running") {
+            setAudioUnlocked();
+          }
+        });
 
         await audioContext.audioWorklet.addModule("pcm-worklet.js");
 
@@ -50,7 +104,7 @@
         });
 
         audioNode.connect(audioContext.destination);
-        await audioContext.resume();
+        if (!(await unlockAudio())) setAudioBlocked();
       })();
 
       return audioReady;
@@ -59,6 +113,11 @@
     globalThis.writeAudio = bytes => {
       if (!audioNode) return;
       audioNode.port.postMessage(bytes, [bytes.buffer]);
+    };
+
+    globalThis.playbackTime = () => {
+      if (!audioContext) return 0;
+      return Math.max(0, audioContext.currentTime - playbackStartTime);
     };
 
     const term = new Terminal({
@@ -83,12 +142,19 @@
     globalThis.renderScreen = screen => term.write(screen);
 
     globalThis.renderError = error => {
-      console.error(error);
-      term.write(`\r\n\x1b[31m${error}\x1b[0m\r\n`);
+      const message = String(error);
+      console.error(message);
+      term.write(`\r\n\x1b[31m${message}\x1b[0m\r\n`);
+      post({ type: "error", message });
     };
 
     globalThis.playbackEnded = () => {
-      parent.postMessage({ type: "playback-ended" }, "*");
+      post({ type: "playback-ended" });
+    };
+
+    globalThis.playbackStarted = () => {
+      playbackStartTime = audioContext.currentTime;
+      post({ type: "playback-started" });
     };
 
     window.addEventListener("message", async event => {
@@ -98,6 +164,7 @@
         document.title = event.data.name || "duh vgmweb";
 
         await initAudio();
+        if (audioContext.state !== "running") setAudioBlocked();
 
         term.clear();
         term.write("\x1b[2J\x1b[H");
@@ -108,7 +175,8 @@
 
         if (result) renderError(result);
       } catch (error) {
-        renderError(error);
+        renderError(error?.message ?? error);
+        globalThis.playbackEnded();
       }
     });
 

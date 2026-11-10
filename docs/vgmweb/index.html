@@ -91,12 +91,32 @@
     const fileInput = document.getElementById("file");
     const chooseButton = document.getElementById("choose");
     const playButton = document.getElementById("play");
+    const info = document.getElementById("info");
+    const defaultInfo = "Grab an OPL3 file from OPL Archive.\nPlease don't hammer the site.";
 
     let pendingFile;
+    let playbackError = false;
+    let audioBlocked = false;
 
     window.addEventListener("message", event => {
-      if (event.data?.type === "playback-ended")
+      if (event.data?.type === "playback-ended") {
         chooseButton.disabled = false;
+        if (!playbackError) {
+          info.textContent = audioBlocked ? "Tap the player to enable sound" : defaultInfo;
+        }
+      } else if (event.data?.type === "playback-started") {
+        if (!audioBlocked) info.textContent = "Playing";
+      } else if (event.data?.type === "audio-blocked") {
+        audioBlocked = true;
+        info.textContent = "Tap the player to enable sound";
+      } else if (event.data?.type === "audio-unlocked") {
+        audioBlocked = false;
+        info.textContent = "Playing";
+      } else if (event.data?.type === "error") {
+        playbackError = true;
+        info.textContent = String(event.data.message ?? "unknown error");
+        chooseButton.disabled = false;
+      }
     });
 
     chooseButton.onclick = () => {
@@ -113,6 +133,8 @@
         name: file.name
       };
 
+      playbackError = false;
+      info.textContent = defaultInfo;
       playButton.disabled = false;
     };
 
