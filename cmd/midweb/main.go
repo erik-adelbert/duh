@@ -126,7 +126,7 @@ func run(screen Printer, audio *JSOut, in *mid.Decoder) error {
 		done <- err
 	}()
 
-	if err := display(screen, ui, quit); err != nil {
+	if err := display(screen, ui, quit, audio); err != nil {
 		return err
 	}
 	return <-done
@@ -218,7 +218,7 @@ func play(in io.Reader, audio *JSOut) error {
 
 	var naudio int64
 
-	start := time.Now()
+	start := audio.Elapsed()
 
 	bps := int64(sampleRate * bytesPerFrame)
 
@@ -234,7 +234,7 @@ func play(in io.Reader, audio *JSOut) error {
 
 			target := time.Duration(naudio * int64(time.Second) / bps)
 
-			if wait := target - time.Since(start); wait > 2*time.Millisecond {
+			if wait := target - (audio.Elapsed() - start); wait > 2*time.Millisecond {
 				time.Sleep(wait)
 			} else {
 				runtime.Gosched() // behind schedule: wasm has one thread, so let the display run
@@ -251,7 +251,7 @@ func play(in io.Reader, audio *JSOut) error {
 	}
 }
 
-func display(screen Printer, w *webtui, quit <-chan struct{}) error {
+func display(screen Printer, w *webtui, quit <-chan struct{}, audio *JSOut) error {
 	const (
 		FPS        = 30
 		LeftMargin = 2
@@ -265,8 +265,6 @@ func display(screen Printer, w *webtui, quit <-chan struct{}) error {
 
 	altScreen(screen, true)
 	defer altScreen(screen, false)
-
-	started := time.Now()
 
 	var (
 		title = "duh midweb\n\n"
@@ -301,9 +299,7 @@ func display(screen Printer, w *webtui, quit <-chan struct{}) error {
 			w.vbR.Frender(&sb, WidgetWidth)
 			sb.WriteString("\n  -36dB\n\n")
 
-			elapsed := time.Since(started)
-
-			fmt.Fprintf(&sb, "%s%s / %s", pads, tui.TimerString(elapsed), w.duration)
+			fmt.Fprintf(&sb, "%s%s / %s", pads, tui.TimerString(audio.Elapsed()), w.duration)
 			sb.WriteString(tui.Green("x1\n"))
 
 			screen(sb.String())
@@ -325,6 +321,10 @@ func altScreen(out Printer, on bool) {
 type JSOut struct{ write js.Value }
 
 func NewJSOut() *JSOut { return &JSOut{write: js.Global().Get("writeAudio")} }
+
+func (o *JSOut) Elapsed() time.Duration {
+	return time.Duration(js.Global().Call("playbackTime").Float() * float64(time.Second))
+}
 
 func (o *JSOut) Write(p []byte) (int, error) {
 	buf := js.Global().Get("Uint8Array").New(len(p))

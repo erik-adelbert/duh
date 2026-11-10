@@ -36,6 +36,7 @@
     let audioNode = null;
     let audioReady = null;
     let bankNames = null;
+    let playbackStartTime = 0;
 
     const post = message => parent.postMessage(message, "*");
 
@@ -129,10 +130,14 @@
       post({ type: "banks", names });
     };
 
-    // A suspended worklet never drains; dropping keeps sound in step with the display once unlocked.
     globalThis.writeAudio = bytes => {
-      if (!audioNode || audioContext.state !== "running") return;
+      if (!audioNode) return;
       audioNode.port.postMessage(bytes, [bytes.buffer]);
+    };
+
+    globalThis.playbackTime = () => {
+      if (!audioContext) return 0;
+      return Math.max(0, audioContext.currentTime - playbackStartTime);
     };
 
     const term = new Terminal({
@@ -162,6 +167,7 @@
     };
 
     globalThis.playbackStarted = () => {
+      playbackStartTime = audioContext.currentTime;
       post({ type: "playback-started" });
     };
 
