@@ -184,13 +184,13 @@
     async function initAudio() {
       if (audioReady) return audioReady;
       audioReady = (async () => {
-        audioContext = new AudioContext();
+        audioContext = new AudioContext({sampleRate: SOURCE_RATE});
         await audioContext.audioWorklet.addModule("pcm-worklet.js");
         audioNode = new AudioWorkletNode(audioContext, "mid-pcm-player", {
           numberOfInputs: 0,
           numberOfOutputs: 1,
           outputChannelCount: [2],
-          processorOptions: { sourceRate: SOURCE_RATE }
+        //   processorOptions: { sourceRate: SOURCE_RATE }
         });
         audioNode.connect(audioContext.destination);
         await audioContext.resume();
