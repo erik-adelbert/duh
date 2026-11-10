@@ -34,10 +34,12 @@ func Encode(out io.Writer, format pcm.Format) (w *Encoder, err error) {
 		return
 	}
 
-	var bufsz = format.BufferSize(200 * ms)
+	nchan := format.ChannelCount()
+
+	// A sample count, not bytes; it must hold at least one frame or Write cannot make progress.
+	bufsz := max(format.SampleCount(200*ms), int64(nchan))
 
 	sr := format.SampleRate()
-	nchan := format.ChannelCount()
 
 	enc := shmp3.NewEncoder(sr, nchan)
 
@@ -69,11 +71,19 @@ func (w *Encoder) Write(p []byte) (n int, err error) {
 
 	w.pending.bytes = append(w.pending.bytes[:0], in[alignedsz:]...)
 
-	nsample := w.DecodeS16(w.samples, in[:alignedsz], w.scratch32)
-	w.pending.samples = append(w.pending.samples, w.samples[:nsample]...)
+	// DecodeS16 stops at the capacity of w.samples, so feed it one buffer's worth at a time.
+	chunksz := len(w.samples) / w.Format.ChannelCount() * framesz
 
-	if err = w.encode(); err != nil {
-		return len(p), mkError(ErrEncode, err)
+	for todo := in[:alignedsz]; len(todo) > 0; {
+		chunk := todo[:min(chunksz, len(todo))]
+		todo = todo[len(chunk):]
+
+		nsample := w.DecodeS16(w.samples, chunk, w.scratch32)
+		w.pending.samples = append(w.pending.samples, w.samples[:nsample]...)
+
+		if err = w.encode(); err != nil {
+			return len(p), mkError(ErrEncode, err)
+		}
 	}
 
 	return len(p), nil

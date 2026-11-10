@@ -208,14 +208,12 @@ func (f Format) Tag() rune {
 }
 
 func (f Format) Duration(size int64) time.Duration {
-	ch, bd := int64(f.channelCount), int64(f.bitDepth)
+	nframe := size / f.FrameSize()
 
-	nsample := size / ch / (bd / 8)
-
-	splf64 := float64(nsample)
+	frf64 := float64(nframe)
 	srf64 := float64(f.sampleRate)
 
-	dt := time.Duration(splf64 / srf64 * 1e9)
+	dt := time.Duration(frf64 / srf64 * 1e9)
 
 	return dt
 }
@@ -235,7 +233,7 @@ func (f Format) BufferSize(duration time.Duration) int64 {
 		duration = DefaultDuration
 	}
 
-	return f.SampleCount(duration) * int64(f.frameSize)
+	return f.FrameCount(duration) * int64(f.frameSize)
 }
 
 type Tag = rune
