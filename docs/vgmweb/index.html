@@ -48,10 +48,7 @@
       cursor: pointer;
     }
 
-    button:disabled {
-      opacity: .45;
-      cursor: default;
-    }
+    button:disabled { opacity: .45; cursor: default; }
 
     #info {
       margin-top: 6px;
@@ -90,7 +87,7 @@
   </iframe>
 
   <script>
-    const frame = document.getElementById("terminal-frame");
+    const terminal = document.getElementById("terminal-frame");
     const fileInput = document.getElementById("file");
     const chooseButton = document.getElementById("choose");
     const playButton = document.getElementById("play");
@@ -122,7 +119,7 @@
     playButton.onclick = () => {
       if (!pendingFile) return;
 
-      frame.contentWindow.postMessage({
+      terminal.contentWindow.postMessage({
         type: "play",
         ...pendingFile
       }, "*");
