@@ -209,7 +209,7 @@ func mktui(in *mid.Decoder) (io.Reader, *webtui) {
 func (w *webtui) Stop() { w.tap.Stop() }
 
 func play(in io.Reader, audio *JSOut) error {
-	buf := make([]byte, 4*1024)
+	buf := make([]byte, 16*1024)
 
 	const (
 		sampleRate    = 48000
