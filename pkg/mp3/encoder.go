@@ -72,7 +72,7 @@ func (w *Encoder) Write(p []byte) (n int, err error) {
 	w.pending.bytes = append(w.pending.bytes[:0], in[alignedsz:]...)
 
 	// DecodeS16 stops at the capacity of w.samples, so feed it one buffer's worth at a time.
-	chunksz := len(w.samples) / w.Format.ChannelCount() * framesz
+	chunksz := len(w.samples) / w.ChannelCount() * framesz
 
 	for todo := in[:alignedsz]; len(todo) > 0; {
 		chunk := todo[:min(chunksz, len(todo))]
