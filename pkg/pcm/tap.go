@@ -80,12 +80,19 @@ func (tap *Tap) Start() {
 			updater := time.NewTicker(hop)
 			defer updater.Stop()
 
+			last := time.Now()
+
 			for {
 				select {
 				case <-tap.stop:
 					return
 
-				case <-updater.C:
+				case now := <-updater.C:
+					// A busy scheduler drops ticks; skip their hops so the window stays on real time.
+					missed := max(int(now.Sub(last)/hop)-1, 0)
+					last = last.Add(time.Duration(missed+1) * hop)
+					tap.Skip(missed * tap.hop)
+
 					if tap.ReadWindow(chunk, tap.hop) {
 						if tap.updateFn != nil {
 							tap.updateFn(chunk)

@@ -157,6 +157,26 @@ func (r *Ring) ReadWindow(out []byte, hop int) bool {
 	return true
 }
 
+// Skip discards up to nframe of the oldest frames without reading them.
+func (r *Ring) Skip(nframe int) {
+	if nframe <= 0 {
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	fs := int(r.FrameSize())
+	nframe = min(nframe, r.n/fs)
+	nskip := nframe * fs
+
+	r.r += nskip
+	if r.r >= len(r.buf) {
+		r.r -= len(r.buf)
+	}
+	r.n -= nskip
+}
+
 func (r *Ring) Reset() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
