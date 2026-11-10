@@ -169,9 +169,11 @@ func mktui(in *mid.Decoder) (io.Reader, *webtui) {
 	vbL, vbR = tui.NewVuBar(), tui.NewVuBar()
 
 	const (
-		WindowSize     = 2048
-		HopSize        = 1470
-		BufferDuration = 500 * ms
+		WindowSize = 2048
+		HopSize    = 1470
+
+		// The ring depth bounds how far the display can trail the sound.
+		BufferDuration = 100 * ms
 	)
 
 	tap, _ := pcm.NewTap(in.Format(), BufferDuration, Window, HopSize)
@@ -209,7 +211,7 @@ func mktui(in *mid.Decoder) (io.Reader, *webtui) {
 func (w *webtui) Stop() { w.tap.Stop() }
 
 func play(in io.Reader, audio *JSOut) error {
-	buf := make([]byte, 16*1024)
+	buf := make([]byte, 4*1024)
 
 	const (
 		sampleRate    = 48000
