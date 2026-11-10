@@ -112,7 +112,7 @@ func defaultFourOps(nquad, total uint, ncard int) int {
 }
 
 func run(screen Printer, audio *JSOut, in *mid.Decoder) error {
-	src, ui, err := mktui(in)
+	ui, err := mktui(in)
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,8 @@ func run(screen Printer, audio *JSOut, in *mid.Decoder) error {
 	quit := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		err := play(src, audio)
+		err := play(in, audio, ui.feed)
+		ui.feed.Close()
 		close(quit)
 		done <- err
 	}()
@@ -136,12 +137,13 @@ type webtui struct {
 	duration   string
 	meterWidth int
 	tap        *pcm.Tap
+	feed       *delayLine
 	sp         tui.Spectro
 	vbL        tui.VuBar
 	vbR        tui.VuBar
 }
 
-func mktui(in *mid.Decoder) (io.Reader, *webtui, error) {
+func mktui(in *mid.Decoder) (*webtui, error) {
 	const (
 		minHz  = 50
 		maxHz  = 20_000
@@ -157,12 +159,12 @@ func mktui(in *mid.Decoder) (io.Reader, *webtui, error) {
 
 	sp, err := tui.NewSpectro(mid.PCMRate, minHz, maxHz, bandCount, false)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	tap, err := pcm.NewTap(in.Format(), 500*time.Millisecond, window, mid.PCMRate/30)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	vbL, vbR := tui.NewVuBar(), tui.NewVuBar()
 	tap.UpdateFunc(func(samples []float64, nchan int) {
@@ -179,10 +181,11 @@ func mktui(in *mid.Decoder) (io.Reader, *webtui, error) {
 	})
 	tap.Start()
 
-	return io.TeeReader(in, tap), &webtui{
+	return &webtui{
 		duration:   tui.TimerString(in.Duration()),
 		meterWidth: meterWidth,
 		tap:        tap,
+		feed:       newDelayLine(tap, audioLatency),
 		sp:         sp,
 		vbL:        vbL,
 		vbR:        vbR,
@@ -191,8 +194,56 @@ func mktui(in *mid.Decoder) (io.Reader, *webtui, error) {
 
 func (w *webtui) Stop() { w.tap.Stop() }
 
-func play(in io.Reader, audio *JSOut) error {
-	buf := make([]byte, 16*1024)
+// audioLatency is the browser's reported delay between handing PCM to the audio graph and hearing it.
+func audioLatency() time.Duration {
+	return time.Duration(js.Global().Call("audioLatency").Float() * float64(time.Second))
+}
+
+// delayLine replays PCM to sink after the audio output latency so the display matches what is heard.
+type delayLine struct {
+	sink  io.Writer
+	delay func() time.Duration
+	queue chan delayedChunk
+	done  chan struct{}
+}
+
+type delayedChunk struct {
+	due  time.Time
+	data []byte
+}
+
+func newDelayLine(sink io.Writer, delay func() time.Duration) *delayLine {
+	d := &delayLine{
+		sink:  sink,
+		delay: delay,
+		queue: make(chan delayedChunk, 256),
+		done:  make(chan struct{}),
+	}
+	go d.run()
+	return d
+}
+
+func (d *delayLine) Write(p []byte) (int, error) {
+	d.queue <- delayedChunk{due: time.Now().Add(d.delay()), data: bytes.Clone(p)}
+	return len(p), nil
+}
+
+func (d *delayLine) run() {
+	defer close(d.done)
+	for chunk := range d.queue {
+		time.Sleep(time.Until(chunk.due))
+		_, _ = d.sink.Write(chunk.data)
+	}
+}
+
+// Close waits until every queued chunk has reached the sink.
+func (d *delayLine) Close() {
+	close(d.queue)
+	<-d.done
+}
+
+func play(in io.Reader, audio *JSOut, feed io.Writer) error {
+	buf := make([]byte, 4*1024)
 	const bytesPerFrame = 4 // stereo s16le
 	bytesPerSecond := int64(mid.PCMRate * bytesPerFrame)
 	var bytesPlayed int64
@@ -204,6 +255,7 @@ func play(in io.Reader, audio *JSOut) error {
 			if _, writeErr := audio.Write(buf[:n]); writeErr != nil {
 				return writeErr
 			}
+			_, _ = feed.Write(buf[:n])
 			bytesPlayed += int64(n)
 			target := time.Duration(bytesPlayed * int64(time.Second) / bytesPerSecond)
 			if wait := target - time.Since(start); wait > 2*time.Millisecond {

@@ -22,29 +22,34 @@
     }
 
     #buttons {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    #midi-file {
+        display: none; /* ensure hidden input doesn't affect flex layout */
     }
 
     #bank-control {
-      display: flex;
-      align-items: center;
-      gap: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 28px; /* match button height so baseline aligns */
     }
 
     #bank {
-      width: 42ch;
-      height: 28px;
-      box-sizing: border-box;
+        width: 42ch;
+        height: 28px;
+        box-sizing: border-box;
     }
 
     button {
-      height: 28px;
-      width: 120px;
-      padding: 4px 12px;
-      box-sizing: border-box;
+        height: 28px;
+        width: 120px;
+        padding: 4px 4px;
+        box-sizing: border-box;
     }
     button:disabled, select:disabled { opacity: .45; }
 
@@ -74,7 +79,10 @@
       </label>
       <button id="play" type="button" disabled>Play</button>
     </div>
-    <div id="info"><span id="status">Choose a MIDI file and instrument bank.</span><br><span id="file-name">No file selected</span><span> / PCM 49.716 kHz stereo</span></div>
+    <div id="info">
+        <span id="status">Choose a MIDI file and instrument bank.</span><br>
+        <span id="file-name">No file selected</span><span> / PCM 49.716 kHz stereo</span>
+    </div>
   </div>
 
   <div id="terminal" aria-label="Spectrogram and stereo VU meters"></div>
@@ -167,6 +175,9 @@
       })();
       return audioReady;
     }
+
+    globalThis.audioLatency = () =>
+      audioContext ? (audioContext.baseLatency || 0) + (audioContext.outputLatency || 0) : 0;
 
     globalThis.writeAudio = bytes => {
       if (audioNode) audioNode.port.postMessage(bytes, [bytes.buffer]);
