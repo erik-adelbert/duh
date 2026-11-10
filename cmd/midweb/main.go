@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"runtime"
 	"strings"
 	"syscall/js"
 	"time"
@@ -235,6 +236,8 @@ func play(in io.Reader, audio *JSOut) error {
 
 			if wait := target - time.Since(start); wait > 2*time.Millisecond {
 				time.Sleep(wait)
+			} else {
+				runtime.Gosched() // behind schedule: wasm has one thread, so let the display run
 			}
 		}
 
