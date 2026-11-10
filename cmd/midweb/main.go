@@ -136,8 +136,6 @@ type webtui struct {
 
 	tap *pcm.Tap
 
-	// feed *delayLine
-
 	sp  tui.Spectro
 	vbL tui.VuBar
 	vbR tui.VuBar
@@ -169,8 +167,7 @@ func mktui(in *mid.Decoder) (io.Reader, *webtui) {
 	vbL, vbR = tui.NewVuBar(), tui.NewVuBar()
 
 	const (
-		WindowSize = 2048
-		HopSize    = 1470
+		HopSize = 1470
 
 		// The ring depth bounds how far the display can trail the sound.
 		BufferDuration = 100 * ms

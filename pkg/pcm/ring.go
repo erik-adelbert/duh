@@ -73,13 +73,15 @@ func (r *Ring) Write(p []byte) (n int, err error) {
 	if len(r.pending) > 0 {
 		need := min(fs-len(r.pending), len(p))
 
-		r.pending = p[:need]
+		r.pending = append(r.pending, p[:need]...)
 		p = p[need:]
 
-		if len(r.pending) == fs {
-			r.writeFrame(r.pending)
-			r.pending = r.pending[:0]
+		if len(r.pending) < fs {
+			return // p ended before the frame did
 		}
+
+		r.writeFrame(r.pending)
+		r.pending = r.pending[:0]
 	}
 
 	// Write complete nframe directly from p.
@@ -89,11 +91,8 @@ func (r *Ring) Write(p []byte) (n int, err error) {
 		r.writeFrame(p[start : start+fs])
 	}
 
-	// Save the incomplete trailing frame.
-	p = p[nframe*fs:]
-	if len(p) > 0 {
-		r.pending = p
-	}
+	// Copy the incomplete trailing frame; the caller may reuse p.
+	r.pending = append(r.pending[:0], p[nframe*fs:]...)
 
 	return
 }
