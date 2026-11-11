@@ -239,13 +239,13 @@ func (s *Synth) Controller(midCh uint32, ctrl, value uint8) {
 	case 64: // Sustain pedal
 		ch.sustain = value
 		if value == 0 {
-			s.KillSustainingNotes(int(midCh), -1, HoldPedal)
+			s.KillSustainingNotes(int(midCh), -1, holdPedal)
 		}
 	case 66: // Sostenuto pedal
 		if value >= 64 {
 			s.MarkSostenutoNotes(int(midCh))
 		} else {
-			s.KillSustainingNotes(int(midCh), -1, HoldSostenuto)
+			s.KillSustainingNotes(int(midCh), -1, holdSostenuto)
 		}
 	case 67: // Soft pedal
 		ch.isSoft = value >= 64
@@ -278,7 +278,7 @@ func (s *Synth) Controller(midCh uint32, ctrl, value uint8) {
 		}
 		s.UpdatePortamento(midCh)
 		s.NoteUpdateAll(midCh, UpdPan|UpdVolume|UpdPitch)
-		s.KillSustainingNotes(int(midCh), -1, HoldAny)
+		s.KillSustainingNotes(int(midCh), -1, holdAny)
 	case 120: // All sounds off
 		for note := range ch.activeNotes {
 			s.NoteUpdate(midCh, note, UpdOff|UpdMute, -1)

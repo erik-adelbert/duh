@@ -70,11 +70,11 @@ func (t *testSynth) playbackNoteOn(ch uint32, note, velocity uint8) bool {
 func (t *testSynth) playbackNoteOff(ch uint32, note, velocity uint8) {
 	t.NoteOff(ch, note)
 }
-func (t *testSynth) prepareFilePlayback() error    { t.prepared++; return nil }
-func (t *testSynth) setFileFormat(format Format)   { t.format = format }
-func (t *testSynth) addCMFInstrument(data adlData) {}
-func (t *testSynth) useCMFBank()                   {}
-func (t *testSynth) useRSXXDefaults()              {}
+func (t *testSynth) prepareFilePlayback() error       { t.prepared++; return nil }
+func (t *testSynth) setFileFormat(format Format)      { t.format = format }
+func (t *testSynth) setCMFInstruments(data []adlData) {}
+func (t *testSynth) useCMFBank()                      {}
+func (t *testSynth) useRSXXDefaults()                 {}
 func (t *testSynth) writeOPL(reg, value int) {
 	t.events = append(t.events, fmt.Sprintf("opl:%x:%x", reg, value))
 }

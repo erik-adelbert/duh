@@ -24,6 +24,7 @@
 
 package mid
 
+// InstrumentNames lists the General MIDI instrument names in order.
 var InstrumentNames = [...]string{
 	"AcousticGrandPiano",
 	"BrightAcousticGrand",

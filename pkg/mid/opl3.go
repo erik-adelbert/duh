@@ -30,7 +30,7 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
-var Operators = [...]uint16{
+var operators = [...]uint16{
 	// Channels 0-2
 	0x000, 0x003, 0x001, 0x004, 0x002, 0x005, // operators  0, 3,  1, 4,  2, 5
 	// Channels 3-5
@@ -64,7 +64,7 @@ var Operators = [...]uint16{
 	0x011, 0xFFF, // operator 13
 }
 
-var Channels = [...]int{
+var channels = [...]int{
 	0x000, 0x001, 0x002, 0x003, 0x004, 0x005, 0x006, 0x007, 0x008, // 0..8
 	0x100, 0x101, 0x102, 0x103, 0x104, 0x105, 0x106, 0x107, 0x108, // 9..17 (secondary set)
 	0x006, 0x007, 0x008, 0x008, 0x008, // hardware percussion
@@ -91,33 +91,6 @@ var Channels = [...]int{
      cym      = op(5): 0xBD bit 0x02, operators 17 (0x17)               / channels 8b
      hihat    = op(2): 0xBD bit 0x01, operators 13 (0x11)               / channels 7
 */
-
-// Replaces adl[] when a CMF file is loaded
-var DynamicInstruments []adlData
-
-// Replaces adlins[] when a CMF file is loaded
-var DynamicMetaInstruments []adlMeta
-
-// GetAdlIns returns the ADLData for the given instrument number.
-// If the high bit (DynamicInstrumentTag) is set, the number indexes
-// into DynamicInstruments; otherwise it indexes into the static ADL table.
-func GetAdlIns(id uint16) *adlData {
-	if has(id, DynamicInstrumentTag) {
-		i := int(id &^ DynamicInstrumentTag)
-
-		if i >= len(DynamicInstruments) {
-			return nil
-		}
-
-		return &DynamicInstruments[i]
-	}
-
-	if int(id) >= len(adlIns) {
-		return nil
-	}
-
-	return &adlIns[id]
-}
 
 var (
 	// BankSelect selects which bank table to use for MIDI→meta-instrument lookup.
@@ -188,8 +161,9 @@ type OPL3 struct {
 
 	quads []int8 // QuadOP type for each channel
 
-	ins []uint16 // index to adl[], cached, needed by Touch()
-	pit []uint8  // value poked to B0, cached, needed by NoteOff()
+	ins        []uint16 // index to adl[], cached, needed by Touch()
+	pit        []uint8  // value poked to B0, cached, needed by NoteOff()
+	instrument func(uint16) adlData
 
 	bds []int
 	cmf bool
@@ -213,7 +187,7 @@ func (o *OPL3) SetMasterVolume(v int) {
 	o.master = v
 }
 
-func newOPL3(cardCount, quadOpsCount, flags int) *OPL3 {
+func newOPL3(cardCount, quadOpsCount, flags int, instrument func(uint16) adlData) *OPL3 {
 	const (
 		ncpc  = 23 // number of channels per OPL3 card
 		perc0 = 18
@@ -225,6 +199,7 @@ func newOPL3(cardCount, quadOpsCount, flags int) *OPL3 {
 		CardCount:    cardCount,
 		QuadOpsCount: quadOpsCount,
 		Flags:        flags,
+		instrument:   instrument,
 
 		Cards: make([]*opl3.Device, cardCount),
 		bds:   make([]int, cardCount),
@@ -261,8 +236,8 @@ func newOPL3(cardCount, quadOpsCount, flags int) *OPL3 {
 	for i := range cardCount {
 		o.Cards[i] = opl3.NewDevice(PCMRate)
 
-		for j := range Channels[:18] {
-			o.poke(i, 0xB0+Channels[j], 0x00)
+		for j := range channels[:18] {
+			o.poke(i, 0xB0+channels[j], 0x00)
 		}
 
 		for j := range len(init) / 2 {
@@ -333,7 +308,7 @@ func (o *OPL3) operator(ii, slot int) uint16 {
 	if o.cmf && ii >= 18 {
 		index += 10
 	}
-	return Operators[index]
+	return operators[index]
 }
 
 func (o *OPL3) setBankMode(setup uint16, rhythm bool) {
@@ -382,7 +357,7 @@ func (o *OPL3) noteOff(c int) {
 		return
 	}
 
-	o.poke(card, 0xB0+Channels[ii], int(o.pit[c]&0xDF))
+	o.poke(card, 0xB0+channels[ii], int(o.pit[c]&0xDF))
 }
 
 // noteOn keys a channel on at the given tone (MIDI note plus bend, in semitones).
@@ -395,7 +370,7 @@ func (o *OPL3) noteOn(c int, tone float64) {
 
 	x := int(o.vm.Freq(tone, &off))
 
-	ch := Channels[ii]
+	ch := channels[ii]
 	if o.cmf && ii >= 21 {
 		ch = 0xFFF
 	}
@@ -429,7 +404,7 @@ func (o *OPL3) mulOffset(c, offset int) {
 		return
 	}
 
-	ains := GetAdlIns(o.ins[c])
+	ains := o.instrument(o.ins[c])
 	ops := [2]int{int(ains.ModulatorE862) & 0xFF, int(ains.CarrierE862) & 0xFF}
 
 	for k, v := range ops {
@@ -457,7 +432,7 @@ func (o *OPL3) touch(c, vel, vol, exp, bright int, isDrum bool) {
 	var i0, i1 uint16
 
 	i := o.ins[c]
-	ains := GetAdlIns(i)
+	ains := o.instrument(i)
 
 	mode := model.OPLVoice_MODE_2op_AM
 	switch o.quads[c] {
@@ -468,13 +443,13 @@ func (o *OPL3) touch(c, vel, vol, exp, bright int, isDrum bool) {
 		i1 = o.ins[c+3]
 
 		mode = 2 // 4-op xx-xx ops 1&2
-		mode += int(GetAdlIns(i0).FeedConn&1 + 2*(GetAdlIns(i1).FeedConn&1))
+		mode += int(o.instrument(i0).FeedConn&1 + 2*(o.instrument(i1).FeedConn&1))
 	case QuadSlave:
 		i0 = o.ins[c-3]
 		i1 = i
 
 		mode = 6 // 4-op xx-xx ops 3&4
-		mode += int(GetAdlIns(i0).FeedConn&1 + 2*(GetAdlIns(i1).FeedConn&1))
+		mode += int(o.instrument(i0).FeedConn&1 + 2*(o.instrument(i1).FeedConn&1))
 	}
 
 	todos := [10][2]bool{
@@ -558,7 +533,7 @@ func (o *OPL3) touch(c, vel, vol, exp, bright int, isDrum bool) {
 // mute sets the maximum attenuation on a channel's operators.
 func (o *OPL3) mute(c int) {
 	card, ii := c/23, c%23
-	ains := GetAdlIns(o.ins[c])
+	ains := o.instrument(o.ins[c])
 
 	if op0 := o.operator(ii, 0); op0 != 0xFFF {
 		o.poke(card, 0x40+int(op0), int(ains.Modulator40)|63)
@@ -579,7 +554,7 @@ func (o *OPL3) patch(c int, i uint16) {
 	op0 := int(o.operator(ii, 0))
 	op1 := int(o.operator(ii, 1))
 
-	ains := GetAdlIns(i)
+	ains := o.instrument(i)
 
 	mod := int(ains.ModulatorE862)
 	car := int(ains.CarrierE862)
@@ -604,11 +579,11 @@ func (o *OPL3) patch(c int, i uint16) {
 func (o *OPL3) pan(phys, value int) {
 	card, ii := phys/23, phys%23
 
-	if ii >= 21 || Channels[ii] == 0xFFF {
+	if ii >= 21 || channels[ii] == 0xFFF {
 		return
 	}
 
-	reg := Channels[ii]
+	reg := channels[ii]
 	pan := 0x30
 
 	if has(o.Flags, ModeSoftPanning) {
@@ -625,7 +600,7 @@ func (o *OPL3) pan(phys, value int) {
 		}
 	}
 
-	o.poke(card, 0xC0+reg, pan|int(GetAdlIns(o.ins[phys]).FeedConn))
+	o.poke(card, 0xC0+reg, pan|int(o.instrument(o.ins[phys]).FeedConn))
 }
 
 // silence all OPL channels.

@@ -33,6 +33,7 @@ import (
 	"time"
 )
 
+// BankDB represents the database of banks, MIDI banks, instruments, and operators.
 type BankDB struct {
 	Banks []*BankEntry
 	Midis []*MidiBank
@@ -41,21 +42,23 @@ type BankDB struct {
 }
 
 const (
-	Hintsz     = 128
-	MidiHintsz = 150
-	InsHintsz  = 5500
-	OpHintsz   = 9100
+	hintsz     = 128
+	midiHintsz = 150
+	insHintsz  = 5500
+	opHintsz   = 9100
 )
 
+// NewBankDB creates a new BankDB with preallocated slices.
 func NewBankDB() *BankDB {
 	return &BankDB{
-		Banks: make([]*BankEntry, 0, Hintsz),
-		Midis: make([]*MidiBank, 0, MidiHintsz),
-		Ins:   make([]*InsEntry, 0, InsHintsz),
-		Ops:   make([]*OP, 0, OpHintsz),
+		Banks: make([]*BankEntry, 0, hintsz),
+		Midis: make([]*MidiBank, 0, midiHintsz),
+		Ins:   make([]*InsEntry, 0, insHintsz),
+		Ops:   make([]*OP, 0, opHintsz),
 	}
 }
 
+// Dump serializes the BankDB to the specified output file.
 func (db *BankDB) Dump(output string) error {
 	out, err := os.Create(output)
 	if err != nil {
@@ -75,6 +78,7 @@ func (db *BankDB) Dump(output string) error {
 	return err
 }
 
+// OpenDB deserializes a BankDB from the specified input file.
 func OpenDB(input string) (*BankDB, error) {
 	f, err := os.Open(input)
 	if err != nil {
@@ -95,6 +99,7 @@ func OpenDB(input string) (*BankDB, error) {
 	return db, nil
 }
 
+// AddBank adds or updates a bank entry in the database.
 func (db *BankDB) AddBank(ID int, name string, setup uint16) int {
 	i := slices.IndexFunc(db.Banks, func(be *BankEntry) bool { return be.ID == ID })
 
@@ -109,6 +114,7 @@ func (db *BankDB) AddBank(ID int, name string, setup uint16) int {
 	return i
 }
 
+// AddMidi adds or updates a MIDI bank in the database.
 func (db *BankDB) AddMidi(ID int, mb *MidiBank, drum bool) {
 	be := db.Banks[ID]
 
@@ -172,6 +178,7 @@ func (ie *InsEntry) eq(o *InsEntry) bool {
 	return ie.InsData == o.InsData
 }
 
+// BankEntry represents a bank of instruments, either melodic or drum.
 type BankEntry struct {
 	ID     int
 	Name   string
@@ -183,20 +190,23 @@ type BankEntry struct {
 	Drums []int
 }
 
+// NewBankEntry creates a new BankEntry with the given ID and preallocated slices for melodic and drum instruments.
 func NewBankEntry(id int) *BankEntry {
 	return &BankEntry{
 		ID: id,
 
-		Melos: make([]int, 0, Hintsz),
-		Drums: make([]int, 0, Hintsz),
+		Melos: make([]int, 0, hintsz),
+		Drums: make([]int, 0, hintsz),
 	}
 }
 
+// MidiBank represents a MIDI bank with LSB, MSB, and instrument mappings.
 type MidiBank struct {
 	LSB, MSB byte
 	Ins      [128]int
 }
 
+// NewMidiBank creates a new MIDI bank with the specified LSB and MSB, initializing all instrument slots to silence (-1).
 func NewMidiBank(lsb, msb uint8) *MidiBank {
 	mb := &MidiBank{
 		LSB: lsb,
@@ -210,12 +220,14 @@ func NewMidiBank(lsb, msb uint8) *MidiBank {
 	return mb
 }
 
+// InsEntry represents an instrument entry with metadata and instrument data.
 type InsEntry struct {
 	Metas []string
 
 	InsData
 }
 
+// InsData represents the detailed data of an instrument, including note offsets, velocity offsets, flags, feedback/connection, and operator indices.
 type InsData struct {
 	Note struct {
 		Off0, Off1 int8
@@ -235,24 +247,31 @@ type InsData struct {
 	Ops [4]int
 }
 
+// NewInsEntry creates a new InsEntry with an empty Metas slice.
 func NewInsEntry() *InsEntry {
 	return &InsEntry{
 		Metas: []string{},
 	}
 }
 
+// SetFBConn sets the feedback/connection for an InsEntry.
 func (ie *InsEntry) SetFBConn(fbcon0, fbcon1 uint16) {
 	ie.FBConn = (fbcon0 & 0xF) | ((fbcon1 & 0xF) << 8)
 }
 
+// Is4Op checks if the given flags indicate a 4-operator instrument.
 func Is4Op(flags int) bool {
 	return has(flags, Flag4op|FlagPseudo4op)
 }
 
+// IsPseudo4Op checks if the given flags indicate a pseudo 4-operator instrument.
 func IsPseudo4Op(flags int) bool {
 	return has(flags, FlagPseudo4op)
 }
 
+// OP represents the operator registers for an instrument.
+// E862 packs registers 0xE0, 0x80, 0x60 and 0x20; D40 is register 0x40.
+// D40 packs register 0x40.
 type OP struct {
 	// E862 packs registers 0xE0, 0x80, 0x60 and 0x20; D40 is register 0x40.
 	E862 uint32

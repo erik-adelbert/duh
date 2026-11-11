@@ -56,7 +56,7 @@ type synth interface {
 	playbackNoteOff(uint32, uint8, uint8)
 	prepareFilePlayback() error
 	setFileFormat(Format)
-	addCMFInstrument(adlData)
+	setCMFInstruments([]adlData)
 	useCMFBank()
 	useRSXXDefaults()
 	writeOPL(int, int)
@@ -68,7 +68,7 @@ type Sequencer struct {
 	curDev map[uint32]uint32
 
 	synth
-	pos         struct{ cur, loop position }
+	pos         struct{ cur, loop, row position }
 	tracks      [][]byte
 	invδ, tempo frac
 	loop        struct {
@@ -105,21 +105,31 @@ type position struct {
 
 	wait time.Duration
 
-	// TickWait     uint64
-	// Tick0, TickN uint64
-
 	tracks []trackInfo
 }
 
-func (p position) clone() position {
-	p.tracks = append([]trackInfo(nil), p.tracks...)
-	for i := range p.tracks {
-		if p.tracks[i].Reader != nil {
-			reader := *p.tracks[i].Reader
-			p.tracks[i].Reader = &reader
-		}
+func (p *position) copyFrom(src *position) {
+	tracks := p.tracks
+	if cap(tracks) < len(src.tracks) {
+		tracks = make([]trackInfo, len(src.tracks))
+	} else {
+		tracks = tracks[:len(src.tracks)]
 	}
-	return p
+	for i := range tracks {
+		reader := tracks[i].Reader
+		tracks[i] = src.tracks[i]
+		if src.tracks[i].Reader == nil {
+			tracks[i].Reader = nil
+			continue
+		}
+		if reader == nil {
+			reader = new(bytes.Reader)
+		}
+		*reader = *src.tracks[i].Reader
+		tracks[i].Reader = reader
+	}
+	*p = *src
+	p.tracks = tracks
 }
 
 // trackInfo holds info about a single track's position
@@ -127,9 +137,6 @@ type trackInfo struct {
 	*bytes.Reader
 	delay  int64
 	status int
-
-	// LastEvent int
-	// State0    TrackDump
 }
 
 // SetNoLooping controls whether playback stops when the song reaches its end.
@@ -157,7 +164,7 @@ func (s *Sequencer) ReadDelay(tk int) int64 {
 
 		var ev [2]byte
 
-		n, _ := io.ReadFull(tr.Reader, ev[:])
+		n, _ := tr.Read(ev[:])
 		_, _ = tr.Seek(-int64(n), io.SeekCurrent)
 
 		if ev == [2]byte{0xFF, 0x2F} {
@@ -361,14 +368,10 @@ func (s *Sequencer) load(in io.ReadSeeker, format Format, info midinfo) error {
 	}
 	s.setFileFormat(format)
 
-	// fmt.Fprintf(os.Stderr, "load: δticks=%d ntrack=%d eof=%d\n", δticks, ntrack, info.eof)
-
 	s.tracks = make([][]byte, ntrack)
 	s.pos.cur.tracks = make([]trackInfo, ntrack)
 	s.invδ = newFrac(1, 1000000*int64(δticks))
 	s.tempo = newFrac(1, int64(δticks))
-
-	// fmt.Fprintf(os.Stderr, "load: tracks=%d\n", len(m.tracks))
 
 	endTag := []byte{0xFF, 0x2F, 0x00, 0x00}
 
@@ -583,6 +586,12 @@ func (s *Sequencer) metaCMF(fp io.ReadSeeker, hdr []byte) (midinfo, error) {
 
 	nins := u16(raw[:2])
 
+	// The last tagged index is reserved for NOID.
+	if int(nins) > int(DynamicIndexMask) {
+		return midinfo{}, mkError(ErrMidi, "too many CMF instruments")
+	}
+
+	instruments := make([]adlData, 0, nins)
 	_, _ = fp.Seek(ioff, io.SeekStart)
 	for range nins {
 		var dat [16]byte
@@ -603,11 +612,12 @@ func (s *Sequencer) metaCMF(fp io.ReadSeeker, hdr []byte) (midinfo, error) {
 			Finetune:      0,
 		}
 
-		s.addCMFInstrument(adl)
+		instruments = append(instruments, adl)
 	}
 
 	_, _ = fp.Seek(moff, io.SeekStart)
 
+	s.setCMFInstruments(instruments)
 	s.useCMFBank()
 
 	return midinfo{δticks: uint32(ntick), ntrack: 1}, nil
@@ -799,7 +809,7 @@ func (s *Sequencer) ProcessEvents() {
 
 	ntrack := len(s.tracks)
 
-	row0 := s.pos.cur.clone()
+	s.pos.row.copyFrom(&s.pos.cur)
 	tempo0 := s.tempo
 
 	tracks := s.pos.cur.tracks
@@ -849,7 +859,7 @@ trackScan:
 	}
 
 	if s.loop.start {
-		s.pos.loop = row0
+		s.pos.loop.copyFrom(&s.pos.row)
 		s.loop.tempo = tempo0
 		s.loop.start = false
 	}
@@ -862,8 +872,8 @@ trackScan:
 			return
 		}
 
-		s.pos.cur = s.pos.loop.clone()
-		s.pos.cur.wait = row0.wait
+		s.pos.cur.copyFrom(&s.pos.loop)
+		s.pos.cur.wait = s.pos.row.wait
 		s.tempo = s.loop.tempo
 		s.loop.generation++
 	}

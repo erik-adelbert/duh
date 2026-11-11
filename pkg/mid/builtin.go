@@ -92,7 +92,7 @@ type adlMeta struct {
 	KOFF time.Duration
 }
 
-func MkADLMeta() adlMeta {
+func mkADLMeta() adlMeta {
 	return adlMeta{
 		Flags: FlagSilence,
 	}
@@ -112,11 +112,13 @@ type adlBank struct {
 	Drums []ADLMidiBank
 }
 
+// ADLMidiBank represents a MIDI bank with LSB, MSB, and instrument mappings.
 type ADLMidiBank struct {
 	bank
 	Programs [128]uint16
 }
 
+// BankNames returns the names of all built-in ADL banks.
 func BankNames() []string {
 	names := make([]string, len(banks))
 

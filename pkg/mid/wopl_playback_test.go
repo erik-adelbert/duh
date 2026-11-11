@@ -131,7 +131,7 @@ func TestWOPLBankModeAndRhythmPlayback(t *testing.T) {
 }
 
 func TestRhythmOperatorMapping(t *testing.T) {
-	o := newOPL3(1, 0, 0)
+	o := NewSynth(1, 0, 0).OPL
 	want := [5][2]uint16{{0x10, 0x13}, {0xfff, 0x14}, {0x12, 0xfff}, {0xfff, 0x15}, {0x11, 0xfff}}
 	for i, pair := range want {
 		for slot := range 2 {
@@ -165,7 +165,7 @@ func TestBankSwitchStopsOnlyAffectedVoices(t *testing.T) {
 	}
 	m.achans[6].users[loc] = locData{ins: 0}
 	held := location{mchan: uint16(base), note: 61}
-	m.achans[7].users[held] = locData{ins: 0, sustained: HoldPedal}
+	m.achans[7].users[held] = locData{ins: 0, sustained: holdPedal}
 	unaffected := location{mchan: uint16(base), note: 62}
 	m.mchans[base].activeNotes[62] = &noteInfo{
 		instrument: instrument{Meta: 0}, phys: phys{9: 0},
@@ -226,7 +226,7 @@ func TestPseudoFourOpPlaybackUsesTwoVoices(t *testing.T) {
 		if !ok {
 			t.Fatal("OPL state unavailable")
 		}
-		reg := Channels[channel%23]
+		reg := channels[channel%23]
 		if got := int(state.Registers[reg>>8][0xa0+reg&0xff]) | int(state.Registers[reg>>8][0xb0+reg&0xff])<<8; got != want {
 			t.Errorf("voice %d frequency = %#x, want %#x", ins, got, want)
 		}

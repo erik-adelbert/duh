@@ -74,19 +74,19 @@ type location struct {
 	note  uint8
 }
 
-// Hold tells which pedals keep a released note sounding.
-type Hold uint8
+// hold tells which pedals keep a released note sounding.
+type hold uint8
 
 const (
-	HoldNone      Hold = 0
-	HoldPedal     Hold = 1 // sustain pedal
-	HoldSostenuto Hold = 2 // sostenuto pedal
-	HoldAny       Hold = HoldPedal | HoldSostenuto
+	holdNone      hold = 0
+	holdPedal     hold = 1 // sustain pedal
+	holdSostenuto hold = 2 // sostenuto pedal
+	holdAny       hold = holdPedal | holdSostenuto
 )
 
 // locData holds data for a location
 type locData struct {
-	sustained Hold
+	sustained hold
 	ins       uint16
 	KONDecay  time.Duration
 	vibDelay  time.Duration
@@ -101,11 +101,11 @@ func NewSynth(cardCount, quadOpsCount, flags int) *Synth {
 func newSynth(cardCount, quadOpsCount, flags int, bank uint32) *Synth {
 	s := &Synth{
 		devices: make(map[string]uint32),
-		OPL:     newOPL3(cardCount, quadOpsCount, flags),
 		bank:    bank,
 		smode:   ModeXG,
 		adlDrum: has(flags, ModeADLPercussion),
 	}
+	s.OPL = newOPL3(cardCount, quadOpsCount, flags, s.GetAdlIns)
 	s.SetVolumeModel(0)
 	s.applyBankMode()
 	_ = s.initADLChannels()
@@ -127,10 +127,13 @@ func (s *Synth) prepareFilePlayback() error { return s.initADLChannels() }
 
 func (s *Synth) setFileFormat(format Format) { s.OPL.cmf = format == FormatCMF }
 
-func (s *Synth) addCMFInstrument(data adlData) {
-	id := uint16(len(s.dyno.ins)) | DynamicInstrumentTag
-	s.dyno.metas = append(s.dyno.metas, adlMeta{ID0: id, ID1: id, KON: 1000, KOFF: 500})
-	s.dyno.ins = append(s.dyno.ins, data)
+func (s *Synth) setCMFInstruments(instruments []adlData) {
+	s.dyno.ins = instruments
+	s.dyno.metas = make([]adlMeta, len(instruments))
+	for i := range instruments {
+		id := uint16(i) | DynamicInstrumentTag
+		s.dyno.metas[i] = adlMeta{ID0: id, ID1: id, KON: 1000, KOFF: 500}
+	}
 }
 
 func (s *Synth) useCMFBank() {
@@ -197,19 +200,22 @@ func (s *Synth) applyBankMode() {
 
 	if len(s.OPL.bds) > 0 && (s.OPL.bds[0]&0x20 != 0) != rhythm {
 		for card := range s.OPL.Cards {
-			for _, ii := range []int{6, 7, 8, 18, 19, 20, 21, 22} {
-				c := card*23 + ii
-				if c < len(s.achans) {
-					for loc := range s.achans[c].users {
+			for _, off := range []int{6, 7, 8, 18, 19, 20, 21, 22} {
+				ch := 23*card + off
+
+				if ch < len(s.achans) {
+					for loc := range s.achans[ch].users {
 						if int(loc.mchan) < len(s.mchans) {
 							s.NoteUpdate(uint32(loc.mchan), loc.note, UpdOff|UpdMute, -1)
 						}
 					}
-					clear(s.achans[c].users)
-					s.achans[c].KOFFDecay = 0
+
+					clear(s.achans[ch].users)
+					s.achans[ch].KOFFDecay = 0
 				}
-				s.OPL.noteOff(c)
-				s.OPL.mute(c)
+
+				s.OPL.noteOff(ch)
+				s.OPL.mute(ch)
 			}
 		}
 	}
@@ -296,8 +302,10 @@ const (
 )
 
 // NoteUpdate updates a note
-func (s *Synth) NoteUpdate(midCh uint32, note uint8, propsMask uint32, ADLChan int) {
-	info, ok := s.mchans[midCh].activeNotes[note]
+func (s *Synth) NoteUpdate(midiChannel uint32, note uint8, flags uint32, adlChannel int) {
+	ach := adlChannel
+	mch := midiChannel
+	info, ok := s.mchans[mch].activeNotes[note]
 
 	if !ok {
 		return
@@ -307,23 +315,24 @@ func (s *Synth) NoteUpdate(midCh uint32, note uint8, propsMask uint32, ADLChan i
 
 	meta := info.Meta
 	ains := s.GetAdlMeta(meta)
-	if has(propsMask, UpdVolume) {
-		vol = uint8(max(0, min(127, int(vol)+int(ains.VelocityOffset))))
+	if has(flags, UpdVolume) {
+		x := int(vol) + int(ains.VelocityOffset)
+		vol = uint8(clamp(0, 127, x))
 	}
 
-	loc := location{mchan: uint16(midCh), note: note}
+	loc := location{mchan: uint16(mch), note: note}
 
 	for ch, ins := range info.phys {
-		if ADLChan >= 0 && ch != ADLChan {
+		if ach >= 0 && ch != ach {
 			continue
 		}
 
-		if has(propsMask, UpdPatch) {
+		if has(flags, UpdPatch) {
 			s.OPL.patch(ch, ins)
 
 			d := s.achans[ch].users[loc]
 
-			d.sustained = HoldNone
+			d.sustained = holdNone
 			d.vibDelay = 0
 			d.KONDecay = ains.KON
 			d.ins = ins
@@ -333,21 +342,21 @@ func (s *Synth) NoteUpdate(midCh uint32, note uint8, propsMask uint32, ADLChan i
 	}
 
 	for ch, ins := range info.phys {
-		if ADLChan >= 0 && ch != ADLChan {
+		if ach >= 0 && ch != ach {
 			continue
 		}
 
-		if has(propsMask, UpdOff) {
-			if has(propsMask, UpdMute) {
+		if has(flags, UpdOff) {
+			if has(flags, UpdMute) {
 				delete(s.achans[ch].users, loc)
 				if len(s.achans[ch].users) == 0 {
 					s.OPL.noteOff(ch)
 					s.OPL.mute(ch)
 					s.achans[ch].KOFFDecay = 0
 				}
-			} else if s.mchans[midCh].sustain == 0 {
+			} else if s.mchans[mch].sustain == 0 {
 				// A sostenuto-held note stays until the pedal is released
-				if s.achans[ch].users[loc].sustained&HoldSostenuto == 0 {
+				if s.achans[ch].users[loc].sustained&holdSostenuto == 0 {
 					delete(s.achans[ch].users, loc)
 
 					if len(s.achans[ch].users) == 0 {
@@ -358,7 +367,7 @@ func (s *Synth) NoteUpdate(midCh uint32, note uint8, propsMask uint32, ADLChan i
 				}
 			} else {
 				d := s.achans[ch].users[loc]
-				d.sustained |= HoldPedal
+				d.sustained |= holdPedal
 
 				s.achans[ch].users[loc] = d
 			}
@@ -367,12 +376,12 @@ func (s *Synth) NoteUpdate(midCh uint32, note uint8, propsMask uint32, ADLChan i
 			continue
 		}
 
-		if has(propsMask, UpdPan) {
-			s.OPL.pan(ch, int(s.mchans[midCh].panning))
+		if has(flags, UpdPan) {
+			s.OPL.pan(ch, int(s.mchans[mch].panning))
 		}
 
-		if has(propsMask, UpdVolume) {
-			c := &s.mchans[midCh]
+		if has(flags, UpdVolume) {
+			c := &s.mchans[mch]
 
 			// Brightness acts like a post high-pass filter: it only
 			// attenuates by half its range, like libADLMIDI's default.
@@ -383,21 +392,21 @@ func (s *Synth) NoteUpdate(midCh uint32, note uint8, propsMask uint32, ADLChan i
 				bright *= 2
 			}
 
-			s.OPL.touch(ch, int(vol), int(c.vol), int(c.expr), bright, c.IsDrum(midCh))
+			s.OPL.touch(ch, int(vol), int(c.vol), int(c.expr), bright, c.IsDrum(mch))
 		}
 
-		if has(propsMask, UpdPitch) {
+		if has(flags, UpdPitch) {
 			d := s.achans[ch].users[loc]
 
-			if d.sustained == HoldNone {
-				pitch := s.mchans[midCh].Value() + float64(s.GetAdlIns(ins).Finetune)
+			if d.sustained == holdNone {
+				pitch := s.mchans[mch].Value() + float64(s.GetAdlIns(ins).Finetune)
 
 				if IsPseudo4Op(ains.Flags) && ins == ains.ID1 {
 					pitch += ains.SecondFinetune
 				}
 
-				vib := s.mchans[midCh].vibrato
-				level := max(vib.lvl, s.mchans[midCh].aftertouch, info.pressure)
+				vib := s.mchans[mch].vibrato
+				level := max(vib.lvl, s.mchans[mch].aftertouch, info.pressure)
 
 				if level != 0 && d.vibDelay >= vib.delay {
 					pitch += float64(level) * vib.depth *
@@ -410,18 +419,18 @@ func (s *Synth) NoteUpdate(midCh uint32, note uint8, propsMask uint32, ADLChan i
 	}
 
 	if len(info.phys) == 0 {
-		delete(s.mchans[midCh].activeNotes, note)
+		delete(s.mchans[mch].activeNotes, note)
 	}
 }
 
-// ChannelScore determines how good a candidate channel is
+// ChannelScore determines how good a candidate channel is for playing a new note
 func (m *Synth) ChannelScore(c0, ins, midCh uint32) int64 {
 	s := -m.achans[c0].KOFFDecay.Milliseconds()
 
 	for loc, data := range m.achans[c0].users {
 		s -= 4000
 
-		if data.sustained == HoldNone {
+		if data.sustained == holdNone {
 			s -= data.KONDecay.Milliseconds()
 		} else {
 			s -= data.KONDecay.Milliseconds() / 2
@@ -446,7 +455,7 @@ func (m *Synth) ChannelScore(c0, ins, midCh uint32) int64 {
 				}
 
 				for _, mData := range m.achans[c1].users {
-					if mData.sustained != HoldNone || mData.vibDelay >= 200 || mData.ins != data.ins {
+					if mData.sustained != holdNone || mData.vibDelay >= 200 || mData.ins != data.ins {
 						continue
 					}
 
@@ -468,7 +477,7 @@ func (s *Synth) PrepareForNewNote(c, ins int) {
 	}
 
 	for loc, data := range s.achans[c].users {
-		if data.sustained == HoldNone {
+		if data.sustained == holdNone {
 			if (data.vibDelay < 70 || data.KONDecay > 20000) && data.ins == uint16(ins) {
 				continue // Do arpeggio
 			}
@@ -479,7 +488,7 @@ func (s *Synth) PrepareForNewNote(c, ins int) {
 	// Kill all sustained notes on this channel.
 	// Don't keep them for arpeggio, because arpeggio requires
 	// an intact "activenotes" record. This is a design flaw.
-	s.KillSustainingNotes(-1, c, HoldAny)
+	s.KillSustainingNotes(-1, c, holdAny)
 
 	if len(s.achans[c].users) == 0 {
 		s.OPL.noteOff(c)
@@ -528,7 +537,7 @@ func (s *Synth) MoveOrKill(fromChannel uint32, loc location, data locData) {
 
 // KillSustainingNotes releases the given kind of hold on notes, and kills
 // those no longer held by any pedal.
-func (s *Synth) KillSustainingNotes(midCh, baseCh int, kind Hold) {
+func (s *Synth) KillSustainingNotes(midCh, baseCh int, kind hold) {
 	first, last := 0, s.OPL.chanCount()
 
 	if baseCh >= 0 {
@@ -545,7 +554,7 @@ func (s *Synth) KillSustainingNotes(midCh, baseCh int, kind Hold) {
 			if (midCh < 0 || int(loc.mchan) == midCh) && data.sustained&kind != 0 {
 				data.sustained &^= kind
 
-				if data.sustained == HoldNone {
+				if data.sustained == holdNone {
 					delete(s.achans[i].users, loc)
 				} else {
 					s.achans[i].users[loc] = data
@@ -563,8 +572,8 @@ func (s *Synth) KillSustainingNotes(midCh, baseCh int, kind Hold) {
 func (s *Synth) MarkSostenutoNotes(midCh int) {
 	for i := range s.OPL.chanCount() {
 		for loc, data := range s.achans[i].users {
-			if int(loc.mchan) == midCh && data.sustained == HoldNone {
-				data.sustained |= HoldSostenuto
+			if int(loc.mchan) == midCh && data.sustained == holdNone {
+				data.sustained |= holdSostenuto
 				s.achans[i].users[loc] = data
 			}
 		}
@@ -720,7 +729,7 @@ func (s *Synth) UpdateArpeggio(_ time.Duration) {
 			loc := locs[idx]
 			data := s.achans[c].users[loc]
 
-			if data.sustained == HoldNone {
+			if data.sustained == holdNone {
 				if data.KONDecay <= 0 {
 					s.NoteUpdate(uint32(loc.mchan), loc.note, UpdOff, c)
 				} else {

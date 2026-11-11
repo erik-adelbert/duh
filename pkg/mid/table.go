@@ -35,7 +35,7 @@ func (db *BankDB) AsTables() (*adlTables, error) {
 
 	tables := new(adlTables{
 		Instruments: []adlData{{}}, // First entry is silence
-		Metas:       []adlMeta{MkADLMeta()},
+		Metas:       []adlMeta{mkADLMeta()},
 		Banks:       make([]adlBank, len(db.Banks)),
 	})
 

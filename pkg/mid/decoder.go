@@ -46,12 +46,12 @@ const (
 // always describe one non-looping pass including the one-second tail. A
 // loopEnd marker ends that pass, as it does for the non-looping player.
 type DecoderOptions struct {
-	CardCount   int
-	FourOps     int
-	Flags       int
-	Bank        int
-	VolumeModel int
-	Loop        bool
+	CardCount   int  // Number of OPL cards to use
+	FourOps     int  // Number of hardware 4-op channels to use
+	Flags       int  // Synthesizer flags
+	Bank        int  // Built-in bank index to use
+	VolumeModel int  // Volume model to use
+	Loop        bool // Enable looping based on sequencer loop markers
 }
 
 // Decoder synthesizes a MIDI file as signed 16-bit little-endian stereo PCM.
