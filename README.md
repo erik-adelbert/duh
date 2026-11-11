@@ -15,6 +15,10 @@
 
 Note. Single dependency on `oto`
 
+## Try a demo in your browser
+
+[WASM+JS demo](https://erik-adelbert.github.io/duh/)
+
 ## Status
 
 **Work in progress. Not yet tagged. No release.**
@@ -89,6 +93,7 @@ Note. Most of it is from `bubbletea` used only in `wavtui` and should be removed
 - opl3: [Nuked-OPL3](https://github.com/nukeykt/Nuked-OPL3), [Nuked-OPL3-Fast](https://github.com/tgies/Nuked-OPL3-fast)
 - aac: [tphakala](https://github.com/tphakala/go-aac)
 - mp3: [go-mp3](https://github.com/hajimehoshi/go-mp3) + [shine-mp3](https://github.com/braheezy/shine-mp3)
+- midi: [libADLMIDI](https://github.com/Wohlstand/libADLMIDI), [adlMIDI](https://github.com/bisqwit/adlmidi), [DMXOPL](https://github.com/sneakernets/DMXOPL)
 
 Note. Dear Mr. Cinap-Lenrek, `pcmconv` is back, it has new friends!
 
