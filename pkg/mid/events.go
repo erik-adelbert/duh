@@ -314,29 +314,29 @@ func (s *Sequencer) handleMIDIEvent(tr *trackInfo, status uint8, midCh uint32) {
 		note, _ := tr.ReadByte()
 		velocity, _ := tr.ReadByte()
 		if status>>4 == 0x08 {
-			s.synth.playbackNoteOff(midCh, note, velocity)
+			s.playbackNoteOff(midCh, note, velocity)
 			return
 		}
-		if s.synth.playbackNoteOn(midCh, note, velocity) {
+		if s.playbackNoteOn(midCh, note, velocity) {
 			s.pos.cur.isPlaying = true
 		}
 	case 0x0A:
 		note, _ := tr.ReadByte()
 		pressure, _ := tr.ReadByte()
-		s.synth.NoteAftertouch(midCh, note, pressure)
+		s.NoteAftertouch(midCh, note, pressure)
 	case 0x0B:
 		ctrl, _ := tr.ReadByte()
 		value, _ := tr.ReadByte()
-		s.synth.Controller(midCh, ctrl, value)
+		s.Controller(midCh, ctrl, value)
 	case 0x0C:
 		program, _ := tr.ReadByte()
-		s.synth.ProgramChange(midCh, program)
+		s.ProgramChange(midCh, program)
 	case 0x0D:
 		pressure, _ := tr.ReadByte()
-		s.synth.ChannelPressure(midCh, pressure)
+		s.ChannelPressure(midCh, pressure)
 	case 0x0E:
 		lsb, _ := tr.ReadByte()
 		msb, _ := tr.ReadByte()
-		s.synth.PitchBend(midCh, uint16(lsb)|uint16(msb)<<7)
+		s.PitchBend(midCh, uint16(lsb)|uint16(msb)<<7)
 	}
 }

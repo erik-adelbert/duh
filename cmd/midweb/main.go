@@ -170,7 +170,6 @@ func mktui(in *mid.Decoder) (io.Reader, *webtui) {
 	const (
 		HopSize = 1470
 
-		// The ring depth bounds how far the display can trail the sound.
 		BufferDuration = 100 * ms
 	)
 

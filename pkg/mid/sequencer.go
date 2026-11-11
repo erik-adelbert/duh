@@ -67,7 +67,7 @@ type synth interface {
 type Sequencer struct {
 	curDev map[uint32]uint32
 
-	synth       synth
+	synth
 	pos         struct{ cur, loop position }
 	tracks      [][]byte
 	invδ, tempo frac
@@ -316,7 +316,7 @@ func (s *Sequencer) openReader(fd io.ReadSeeker) (err error) {
 	}
 
 	s.loop.start = true
-	return s.synth.prepareFilePlayback()
+	return s.prepareFilePlayback()
 }
 
 type Format int
@@ -359,7 +359,7 @@ func (s *Sequencer) load(in io.ReadSeeker, format Format, info midinfo) error {
 	if δticks == 0 || ntrack == 0 {
 		return mkError(ErrMidi, "invalid track count or time division")
 	}
-	s.synth.setFileFormat(format)
+	s.setFileFormat(format)
 
 	// fmt.Fprintf(os.Stderr, "load: δticks=%d ntrack=%d eof=%d\n", δticks, ntrack, info.eof)
 
@@ -603,18 +603,18 @@ func (s *Sequencer) metaCMF(fp io.ReadSeeker, hdr []byte) (midinfo, error) {
 			Finetune:      0,
 		}
 
-		s.synth.addCMFInstrument(adl)
+		s.addCMFInstrument(adl)
 	}
 
 	_, _ = fp.Seek(moff, io.SeekStart)
 
-	s.synth.useCMFBank()
+	s.useCMFBank()
 
 	return midinfo{δticks: uint32(ntick), ntrack: 1}, nil
 }
 
 func (s *Sequencer) metaRSX(fp io.ReadSeeker, hdr []byte) (midinfo, error) {
-	s.synth.useRSXXDefaults()
+	s.useRSXXDefaults()
 
 	return midinfo{δticks: 60, ntrack: 1}, nil
 }
@@ -897,7 +897,7 @@ func (s *Sequencer) HandleEvent(trackID uint32) {
 		}
 
 		if x == 0xF0 {
-			s.synth.SysEx(s.curDev[trackID], s.tracks[trackID][off:off+int64(length)])
+			s.SysEx(s.curDev[trackID], s.tracks[trackID][off:off+int64(length)])
 		}
 
 		_, _ = tr.Seek(int64(length), io.SeekCurrent)
@@ -936,7 +936,7 @@ func (s *Sequencer) HandleEvent(trackID uint32) {
 				s.loop.end = true
 			}
 		case 0x09: // Device selection
-			s.curDev[trackID] = s.synth.DeviceSelect(string(meta))
+			s.curDev[trackID] = s.DeviceSelect(string(meta))
 		case 0xE3: // OPL-specific event
 			i, v := int(meta[0]), int(meta[1])
 
@@ -944,7 +944,7 @@ func (s *Sequencer) HandleEvent(trackID uint32) {
 				v |= 0x30
 			}
 
-			s.synth.writeOPL(i, v)
+			s.writeOPL(i, v)
 		}
 
 		return
