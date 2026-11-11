@@ -26,8 +26,6 @@ package mid
 
 import "fmt"
 
-// const maxStaticADLIDs = int(DynamicInstrumentTag)
-
 // AsTables converts the bank database into the instrument, meta, and patch
 // lookup tables consumed by the MIDI decoder.
 func (db *BankDB) AsTables() (*adlTables, error) {

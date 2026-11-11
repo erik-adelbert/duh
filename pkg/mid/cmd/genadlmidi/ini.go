@@ -37,7 +37,7 @@ func convert(ini, conf string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = in.Close() }()
+	defer in.Close() //nolint:errcheck // can't do anything if it fails
 
 	var (
 		section string

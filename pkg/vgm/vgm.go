@@ -18,7 +18,7 @@ func Example(path string, dump bool) (err error) {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = src.Close() }()
+	defer src.Close() //nolint:errcheck // can't do anything if it fails
 
 	infos, err := src.Stat()
 	if err != nil {
@@ -30,7 +30,7 @@ func Example(path string, dump bool) (err error) {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = in.Close() }()
+	defer in.Close() //nolint:errcheck // can't do anything if it fails
 
 	if dump {
 		fmt.Print(in.DumpCommands())

@@ -255,7 +255,7 @@ func (s *Sequencer) Open(filename string) (err error) {
 	if err != nil {
 		return mkError(ErrMidi, err)
 	}
-	defer func() { _ = fd.Close() }()
+	defer fd.Close() //nolint:errcheck // can't do anything if it fails
 
 	return s.openReader(fd)
 }
@@ -715,7 +715,7 @@ func (s *Sequencer) detectFormat(fp io.ReadSeeker, hdr []byte) Format {
 			)
 
 			off0, _ = fp.Seek(0, io.SeekCurrent)
-			defer func() { _, _ = fp.Seek(off0, io.SeekStart) }()
+			defer fp.Seek(off0, io.SeekStart) //nolint:errcheck // can't do anything if it fails
 
 			_, _ = fp.Seek(2, io.SeekStart)
 

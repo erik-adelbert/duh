@@ -73,7 +73,7 @@ func main() {
 		os.Exit(1)
 	}
 	timer.forceTimings = a.forceTimings
-	defer func() { _ = timer.Close() }()
+	defer timer.Close() //nolint:errcheck // can't do anything if it fails
 
 	ctrlc, stop := sighandle(os.Interrupt, syscall.SIGTERM)
 	defer stop()

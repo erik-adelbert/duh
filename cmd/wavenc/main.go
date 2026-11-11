@@ -43,7 +43,7 @@ func main() {
 		tmp, err := os.CreateTemp("", "*.wav")
 		die(err, "Failed to create temporary output file", 1)
 
-		defer func() { _ = os.Remove(tmp.Name()) }()
+		defer os.Remove(tmp.Name()) //nolint:errcheck // can't do anything if it fails
 
 		w, err := wav.Encode(tmp, a.ofmt)
 		die(err, "Failed to create WAV writer", 1)

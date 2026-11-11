@@ -159,7 +159,7 @@ func (kt *KeyTimer) loadcache(cache string) error {
 		return err
 	}
 
-	defer func() { _ = f.Close() }()
+	defer f.Close() //nolint:errcheck // can't do anything if it fails
 
 	var buf [32]byte
 
@@ -225,7 +225,7 @@ func (kt *KeyTimer) DumpCache(cache string) error {
 		return err
 	}
 
-	defer func() { _ = f.Close() }()
+	defer f.Close() //nolint:errcheck // can't do anything if it fails
 
 	_, err = f.Write([]byte(cacheMagic))
 

@@ -43,7 +43,7 @@ func main() {
 
 	midi, err := mid.Decode(a.input, a.opts)
 	die(err, "Failed to decode MIDI file", 2)
-	defer func() { _ = midi.Close() }()
+	defer midi.Close() //nolint:errcheck // can't do anything if it fails
 
 	if _, err := io.Copy(os.Stdout, midi); err != nil {
 		die(err, "Failed to copy decoded audio", 1)

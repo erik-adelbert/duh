@@ -73,7 +73,7 @@ func main() {
 				js.Global().Call("playbackEnded")
 				return
 			}
-			defer decoder.Close() //nolint:errcheck
+			defer decoder.Close() //nolint:errcheck // can't do anything if it fails
 			js.Global().Call("playbackStarted")
 
 			err = run(

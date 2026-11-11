@@ -214,7 +214,7 @@ func listContents(owner, repo, repoPath string) ([]GitHubContent, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close() //nolint:errcheck // can't do anything if it fails
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -233,7 +233,7 @@ func downloadFile(url, path string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer resp.Body.Close() //nolint:errcheck // can't do anything if it fails
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("status %s", resp.Status)
@@ -243,7 +243,7 @@ func downloadFile(url, path string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = out.Close() }()
+	defer out.Close() //nolint:errcheck // can't do anything if it fails
 
 	_, err = io.Copy(out, resp.Body)
 	return err

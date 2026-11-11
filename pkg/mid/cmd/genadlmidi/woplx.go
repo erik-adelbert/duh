@@ -211,7 +211,7 @@ func parseBank(path string) (*xbank, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = f.Close() }()
+	defer f.Close() //nolint:errcheck // can't do anything if it fails
 
 	bank := new(xbank{
 		hdr: map[string]string{},

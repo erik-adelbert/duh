@@ -37,7 +37,7 @@ func LoadEA(banks *mid.BankDB, id int, bi BankInfo) error {
 		return err
 	}
 
-	defer func() { _ = f.Close() }()
+	defer f.Close() //nolint:errcheck // can't do anything if it fails
 
 	bid := banks.AddBank(id, bi.Name, mid.BnkHMI)
 	melo := mid.NewMidiBank(0, 0)
