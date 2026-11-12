@@ -180,9 +180,9 @@ func play(oto *backend.OtoBackend, in *vgm.Decoder, a args) (err error) {
 		OPL3Regs = tui.NewOPL3State()
 	}
 
-	player := oto.NewPlayer(src)
-	if player == nil {
-		return fmt.Errorf("failed to create audio player")
+	player, err := oto.NewPlayer(src)
+	if err != nil {
+		return fmt.Errorf("failed to create audio player: %w", err)
 	}
 
 	// Set up signal handling for graceful termination

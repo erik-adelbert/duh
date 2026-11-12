@@ -150,9 +150,9 @@ func play(oto *backend.OtoBackend, in io.Reader, a args) (err error) {
 	}
 
 	// Set up the audio playback
-	player := oto.NewPlayer(in)
-	if player == nil {
-		return fmt.Errorf("failed to create audio player")
+	player, err := oto.NewPlayer(in)
+	if err != nil {
+		return fmt.Errorf("failed to create audio player: %w", err)
 	}
 
 	// Set up signal handling for graceful termination

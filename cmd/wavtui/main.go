@@ -66,10 +66,8 @@ func main() {
 	ob, err := backend.NewOtoBackend(ifmt, false)
 	die(err, "Failed to create oto backend", 1)
 
-	p := ob.NewPlayer(in)
-	if p == nil {
-		die(errors.New("failed to create audio player"), "", 1)
-	}
+	p, err := ob.NewPlayer(in)
+	die(err, "Failed to create audio player", 1)
 
 	// Create the playback controller
 	ctrl := player.NewController(p)
