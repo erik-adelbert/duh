@@ -27,7 +27,7 @@ type Player interface {
 	IsPlaying() bool
 	Pause()
 	Play()
-	Position() int64
+	Position() (int64, error)
 	SampleRate() int
 	Seek(offset int64, whence int) (int64, error)
 	SetVolume(volume float64)

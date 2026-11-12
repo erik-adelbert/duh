@@ -64,15 +64,24 @@ func (m *model) Init() tea.Cmd {
 		fmt.Fprintf(sb, "%s", HelpText)
 	}, false)
 
-	m.ctrl.Toggle()
-
+	if err := m.ctrl.Toggle(); err != nil {
+		m.err = err
+		m.tap.Stop()
+		return tea.Quit
+	}
 	return tick()
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tickMsg:
-		m.pos, m.duration, m.playing = m.ctrl.Snapshot()
+		var err error
+		m.pos, m.duration, m.playing, err = m.ctrl.Snapshot()
+		if err != nil {
+			m.err = err
+			m.tap.Stop()
+			return m, tea.Quit
+		}
 
 		if m.withVu {
 			m.vubars.left.Tick(time.Time(msg))
@@ -91,7 +100,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tap.Stop()
 			return m, tea.Quit
 		case " ":
-			m.ctrl.Toggle()
+			if err := m.ctrl.Toggle(); err != nil {
+				m.err = err
+				m.tap.Stop()
+				return m, tea.Quit
+			}
 		case "1":
 			m.slide = SlidePlayback
 		case "?":
@@ -109,9 +122,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.ctrl.SetVolume(m.volume)
 		case "right", "f":
-			m.ctrl.ForwardBy(Position(10 * time.Second))
+			if err := m.ctrl.ForwardBy(Position(10 * time.Second)); err != nil {
+				m.err = err
+				m.tap.Stop()
+				return m, tea.Quit
+			}
 		case "left", "s":
-			m.ctrl.RewindBy(Position(10 * time.Second))
+			if err := m.ctrl.RewindBy(Position(10 * time.Second)); err != nil {
+				m.err = err
+				m.tap.Stop()
+				return m, tea.Quit
+			}
 		}
 	}
 
@@ -185,7 +206,10 @@ type model struct {
 	playScreen *tui.Screen
 	stopScreen *tui.Screen
 	helpScreen *tui.Screen
+	err        error
 }
+
+func (m *model) Err() error { return m.err }
 
 type tickMsg time.Time
 

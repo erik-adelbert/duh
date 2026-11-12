@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"io"
 	"math"
+
+	offcalc "github.com/erik-adelbert/duh/pkg/offset"
 )
 
 // ConvReader converts PCM data read from r using conv.
@@ -156,31 +158,18 @@ func (r *ConvReader) ReadAt(p []byte, off int64) (n int, err error) {
 	return n, err
 }
 
-// remap converts a byte offset from one PCM format to another
-func remap(off, from, to int64) int64 {
-	if from <= 0 || to <= 0 {
-		return off
-	}
-
-	x := off * to
-
-	q := x / from
-	if x%from != 0 && x < 0 { // floor instead of truncate
-		q--
-	}
-
-	return q
-}
-
-// Seek sets the source PCM byte offset for the next Read operation. The offset
-// is aligned to an input frame boundary and conversion state is reset.
+// Seek maps an output PCM byte offset to the source and resets conversion
+// state. If the source's resulting position cannot be mapped back to an output
+// offset, it returns ErrOffsetOverflow after the source has moved.
 func (r *ConvReader) Seek(offset int64, whence int) (off int64, err error) {
 	if r.rs == nil {
 		return 0, ErrESPIPE
 	}
 
 	defer func() {
-		err = mkError(ErrSeek, err)
+		if err != nil {
+			err = fmt.Errorf("%w: %w: %w", ErrPCM, ErrSeek, err)
+		}
 	}()
 
 	ifmt := r.conv.Ifmt()
@@ -189,15 +178,16 @@ func (r *ConvReader) Seek(offset int64, whence int) (off int64, err error) {
 	ifsz := int64(ifmt.frameSize)
 	ofsz := int64(ofmt.frameSize)
 
-	iff := remap(offset, ofsz, ifsz) // map to input offset
+	iff, err := offcalc.Scale(offset, ofsz, ifsz)
+	if err != nil {
+		return 0, err
+	}
 
 	iff, err = r.rs.Seek(iff, whence)
 
 	if err != nil {
 		return
 	}
-
-	off = remap(iff, ifsz, ofsz) // map back to output offset
 
 	// Reset the conversion state and clear any pending output
 	r.pending = nil
@@ -206,6 +196,7 @@ func (r *ConvReader) Seek(offset int64, whence int) (off int64, err error) {
 
 	r.conv.Reset()
 
+	off, err = offcalc.Scale(iff, ifsz, ofsz)
 	return
 }
 

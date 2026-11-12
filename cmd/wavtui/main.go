@@ -80,8 +80,11 @@ func main() {
 	// Pack everything up
 	cli := tea.NewProgram(tui, tea.WithAltScreen())
 
-	_, err = cli.Run()
+	result, err := cli.Run()
 	die(err, "Failed to run player", 1)
+	if status, ok := result.(interface{ Err() error }); ok {
+		die(status.Err(), "Playback failed", 1)
+	}
 }
 
 type flags struct {

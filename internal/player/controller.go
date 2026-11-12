@@ -9,6 +9,7 @@ import (
 	"io"
 	"time"
 
+	offcalc "github.com/erik-adelbert/duh/pkg/offset"
 	"github.com/erik-adelbert/duh/pkg/backend"
 )
 
@@ -24,90 +25,120 @@ func (c *Controller) IsPlaying() bool {
 	return c.p.IsPlaying()
 }
 
-func (c *Controller) Play() {
-	if c.hasEnded() {
-		c.Rewind()
+func (c *Controller) Play() error {
+	ended, err := c.hasEnded()
+	if err != nil {
+		return err
+	}
+	if ended {
+		if err := c.Rewind(); err != nil {
+			return err
+		}
 	}
 
 	c.p.Play()
+	return nil
 }
 
 func (c *Controller) Pause() {
 	c.p.Pause()
 }
 
-func (c *Controller) Toggle() {
+func (c *Controller) Toggle() error {
 	if c.IsPlaying() {
 		c.Pause()
-
-		return
+		return nil
 	}
 
-	c.Play()
+	return c.Play()
 }
 
 func (c *Controller) SetVolume(volume float64) {
 	c.p.SetVolume(volume)
 }
 
-func (c *Controller) Snapshot() (Position, Position, bool) {
+func (c *Controller) Snapshot() (Position, Position, bool, error) {
 	playing := c.IsPlaying()
-	pos, dur := c.position()
+	pos, dur, err := c.position()
 
-	return pos, dur, playing
+	return pos, dur, playing, err
 }
 
-func (c *Controller) hasEnded() bool {
-	pos, dur := c.position()
+func (c *Controller) hasEnded() (bool, error) {
+	pos, dur, err := c.position()
+	if err != nil {
+		return false, err
+	}
 
-	return !c.p.IsPlaying() && abs(pos-dur) <= Position(500*time.Millisecond)
+	return !c.p.IsPlaying() && abs(pos-dur) <= Position(500*time.Millisecond), nil
 }
 
-func (c *Controller) position() (Position, Position) {
-	off := c.p.Position()
+func (c *Controller) position() (Position, Position, error) {
+	off, err := c.p.Position()
+	if err != nil {
+		return 0, 0, fmt.Errorf("playback position: %w", err)
+	}
 	spr := c.p.SampleRate()
 	nch := c.p.ChannelCount()
 	bps := c.p.BitDepth() / 8
 
-	pos := int64(time.Second) * off / int64(spr*nch*bps)
+	pos, err := offcalc.Scale(off, int64(spr)*int64(nch)*int64(bps), int64(time.Second))
+	if err != nil {
+		return 0, 0, fmt.Errorf("playback time: %w", err)
+	}
 
 	dur := c.p.Duration()
 
-	return Position(pos), Position(dur)
+	return Position(pos), Position(dur), nil
 }
 
-func (c *Controller) offset(p Position) int64 {
+func (c *Controller) offset(p Position) (int64, error) {
 	spr := c.p.SampleRate()
 	nch := c.p.ChannelCount()
 	bps := c.p.BitDepth() / 8
 
-	return int64(p) * int64(spr*nch*bps) / int64(time.Second)
+	return offcalc.Scale(int64(p), int64(time.Second), int64(spr)*int64(nch)*int64(bps))
 }
 
-func (c *Controller) Rewind() {
-	_, _ = c.p.Seek(0, io.SeekStart)
+func (c *Controller) Rewind() error {
+	_, err := c.p.Seek(0, io.SeekStart)
+	return err
 }
 
-func (c *Controller) ForwardBy(d Position) {
-	pos, dur := c.position()
+func (c *Controller) ForwardBy(d Position) error {
+	pos, dur, err := c.position()
+	if err != nil {
+		return err
+	}
 
-	if pos+d > dur {
+	if d > dur-pos {
 		d = dur - pos
 	}
 
-	dst := c.offset(d + pos)
-	_, _ = c.p.Seek(dst, io.SeekStart)
+	dst, err := c.offset(d + pos)
+	if err != nil {
+		return err
+	}
+	_, err = c.p.Seek(dst, io.SeekStart)
+	return err
 }
 
-func (c *Controller) RewindBy(d Position) {
-	pos, _ := c.position()
+func (c *Controller) RewindBy(d Position) error {
+	pos, _, err := c.position()
+	if err != nil {
+		return err
+	}
 
 	if pos < d {
 		d = pos
 	}
 
-	dst := c.offset(pos - d)
-	_, _ = c.p.Seek(dst, io.SeekStart)
+	dst, err := c.offset(pos - d)
+	if err != nil {
+		return err
+	}
+	_, err = c.p.Seek(dst, io.SeekStart)
+	return err
 }
 
 type Position time.Duration
