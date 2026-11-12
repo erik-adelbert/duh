@@ -90,8 +90,9 @@ type OtoPlayer struct {
 	*oto.Player
 	pcm.Format
 
-	r  io.Reader
-	rs io.ReadSeeker
+	r    io.Reader
+	rs   io.ReadSeeker
+	ofmt pcm.Format
 }
 
 func (b *OtoBackend) NewPlayer(r io.Reader) *OtoPlayer {
@@ -108,8 +109,9 @@ func (b *OtoBackend) NewPlayer(r io.Reader) *OtoPlayer {
 		Player: b.Context.NewPlayer(r),
 		Format: b.Format,
 
-		r:  r,
-		rs: rs,
+		r:    r,
+		rs:   rs,
+		ofmt: b.ofmt,
 	}
 }
 
@@ -169,7 +171,7 @@ func (p *OtoPlayer) Duration() (dt time.Duration) {
 		return
 	}
 
-	return p.Format.Duration(end)
+	return p.ofmt.Duration(end)
 }
 
 func (p *OtoPlayer) Position() int64 {

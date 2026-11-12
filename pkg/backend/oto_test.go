@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/erik-adelbert/duh/pkg/pcm"
 )
@@ -19,6 +20,7 @@ func TestOtoPrepareReader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	outputFormat, err := pcm.NewFormat(pcm.Float, 32, 1, 44100)
 	if err != nil {
 		t.Fatal(err)
@@ -67,4 +69,41 @@ func TestOtoPrepareReader(t *testing.T) {
 			t.Fatal("non-seekable input should not produce a seeker")
 		}
 	})
+}
+
+func TestOtoPlayerDurationUsesOutputFormat(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		out  string
+	}{
+		{"converted depth", "S16c1r44100", "f32c1r44100"},
+		{"converted channels", "s16c4r44100", "f32c2r44100"},
+		{"unchanged", "s16c2r44100", "s16c2r44100"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ifmt, err := pcm.ParseFormat(tt.in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ofmt, err := pcm.ParseFormat(tt.out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			backend := OtoBackend{Format: ifmt, ofmt: ofmt}
+			source := bytes.NewReader(make([]byte, int(ifmt.BufferSize(time.Second))))
+			_, seeker, err := backend.prepReader(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			player := OtoPlayer{Format: ifmt, ofmt: ofmt, rs: seeker}
+			if got := player.Duration(); got != time.Second {
+				t.Fatalf("duration = %v, want %v", got, time.Second)
+			}
+			if got := player.Format; got != ifmt {
+				t.Fatalf("player format = %v, want input format %v", got, ifmt)
+			}
+		})
+	}
 }
