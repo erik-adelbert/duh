@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -209,6 +210,126 @@ func TestReader_ReadAtDoesNotAffectSequentialRead(t *testing.T) {
 	}
 	if n != len(output) || !bytes.Equal(output, input[:4]) {
 		t.Fatalf("sequential output = %v, want %v", output, input[:4])
+	}
+}
+
+func TestConvReader_ReadAtConvertedStream(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		out  string
+	}{
+		{"same-rate", "s16c1r44100", "u8c1r44100"},
+		{"resampling", "s16c1r44100", "s16c1r48000"},
+		{"dithering", "s16c1r44100", "s8c1r44100"},
+	}
+	input := make([]byte, 40001)
+	for i := range input {
+		input[i] = byte(i*37 + 5)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ifmt := mustReaderFormat(t, tt.in)
+			ofmt := mustReaderFormat(t, tt.out)
+			newReader := func() *ConvReader {
+				t.Helper()
+				conv, err := NewConverter(ofmt, ifmt)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return OpenConv(bytes.NewReader(input), conv)
+			}
+			want, err := io.ReadAll(newReader())
+			if err != nil {
+				t.Fatal(err)
+			}
+			reader := newReader()
+			prefix := make([]byte, 7)
+			if _, err := io.ReadFull(reader, prefix); err != nil {
+				t.Fatal(err)
+			}
+			for _, tc := range []struct {
+				offset int
+				size   int
+			}{
+				{0, 9}, {1, 13}, {257, 29}, {18001, 31}, {len(want) - 3, 8}, {len(want), 1}, {len(want) + 10, 1},
+			} {
+				buf := make([]byte, tc.size)
+				n, err := reader.ReadAt(buf, int64(tc.offset))
+				start := min(tc.offset, len(want))
+				end := min(start+tc.size, len(want))
+				expected := want[start:end]
+				if n != len(expected) || !bytes.Equal(buf[:n], expected) {
+					t.Errorf("ReadAt(%d, %d) = %x, want %x", tc.offset, tc.size, buf[:n], expected)
+				}
+				if len(expected) < tc.size {
+					if err != io.EOF {
+						t.Errorf("ReadAt(%d, %d) error = %v, want EOF", tc.offset, tc.size, err)
+					}
+				} else if err != nil {
+					t.Errorf("ReadAt(%d, %d) error = %v", tc.offset, tc.size, err)
+				}
+			}
+			rest, err := io.ReadAll(reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := append(prefix, rest...); !bytes.Equal(got, want) {
+				t.Fatal("ReadAt changed sequential converted output")
+			}
+			if n, err := reader.ReadAt(make([]byte, 1), -1); n != 0 || !errors.Is(err, ErrRead) {
+				t.Errorf("negative offset = (%d, %v), want ErrRead", n, err)
+			}
+			if n, err := reader.ReadAt(nil, 0); n != 0 || err != nil {
+				t.Errorf("empty ReadAt = (%d, %v), want (0, nil)", n, err)
+			}
+		})
+	}
+}
+
+func TestConvReader_ConcurrentReadAt(t *testing.T) {
+	ifmt := mustReaderFormat(t, SLE16Mono44k)
+	ofmt := mustReaderFormat(t, "s16c1r48000")
+	input := make([]byte, 8000)
+	for i := range input {
+		input[i] = byte(i * 19)
+	}
+	conv, err := NewConverter(ofmt, ifmt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := OpenConv(bytes.NewReader(input), conv)
+	want, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			off := i * 127
+			buf := make([]byte, 128)
+			n, err := reader.ReadAt(buf, int64(off))
+			if err != nil || n != len(buf) || !bytes.Equal(buf, want[off:off+len(buf)]) {
+				t.Errorf("ReadAt(%d) = (%d, %v), output mismatch: %v", off, n, err, !bytes.Equal(buf, want[off:off+len(buf)]))
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func TestConvReader_ReadAtWithoutReaderAt(t *testing.T) {
+	format := mustReaderFormat(t, SLE16Mono44k)
+	conv, err := NewConverter(format, format)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := struct{ io.Reader }{bytes.NewReader([]byte{0, 0})}
+	reader := OpenConv(source, conv)
+	if n, err := reader.ReadAt(make([]byte, 1), 0); n != 0 || !errors.Is(err, ErrESPIPE) {
+		t.Fatalf("ReadAt = (%d, %v), want ErrESPIPE", n, err)
 	}
 }
 

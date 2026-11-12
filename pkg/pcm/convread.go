@@ -12,7 +12,9 @@
 package pcm
 
 import (
+	"fmt"
 	"io"
+	"math"
 )
 
 // ConvReader converts PCM data read from r using conv.
@@ -113,14 +115,33 @@ func (r *ConvReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-// ReadAt reads converted PCM beginning at a source PCM byte offset. The offset
-// is aligned to an input frame boundary and does not affect sequential reads.
+// ReadAt reads converted PCM beginning at an output byte offset without
+// affecting sequential reads. It converts from the beginning of the source
+// to preserve resampling and dithering state, so large offsets can be slow.
 func (r *ConvReader) ReadAt(p []byte, off int64) (n int, err error) {
 	if r.ra == nil {
 		return 0, ErrESPIPE
 	}
+	if off < 0 {
+		return 0, mkError(ErrRead, fmt.Sprintf("negative offset: %d", off))
+	}
+	if len(p) == 0 {
+		return 0, nil
+	}
 
-	return r.ra.ReadAt(p, off)
+	conv, err := NewConverter(r.conv.Ofmt(), r.conv.Ifmt())
+	if err != nil {
+		return 0, mkError(ErrRead, err)
+	}
+	reader := OpenConv(io.NewSectionReader(r.ra, 0, math.MaxInt64), conv)
+	if _, err := io.CopyN(io.Discard, reader, off); err != nil {
+		return 0, err
+	}
+	n, err = io.ReadFull(reader, p)
+	if err == io.ErrUnexpectedEOF {
+		err = io.EOF
+	}
+	return n, err
 }
 
 // remap converts a byte offset from one PCM format to another
