@@ -81,37 +81,23 @@ func (r *ConvReader) Read(p []byte) (n int, err error) {
 		// If there is an error from the underlying reader, handle it
 		// before attempting to read more data.
 		if r.err != nil {
-			// If there is an error, we may still have pending data to
-			// return before propagating the error.
 			if r.err == io.EOF && !r.flushed {
 				nflush := r.conv.Flush(r.obuf)
+				r.flushed = true
 
 				if nflush > 0 {
 					r.pending = r.obuf[:nflush]
-					r.flushed = true
 					continue
 				}
-
-				r.flushed = true
 			}
 
-			// If there is no (more) pending data, propagate the error.
-			if len(r.pending) == 0 {
-				err = r.err
-				return
-			}
-
-			// There is still pending data, continue to copy it to p.
-			continue
+			err = r.err
+			return
 		}
 
 		// Read more data from the underlying reader and process it.
 		var nread int
 		nread, r.err = r.r.Read(r.ibuf)
-
-		if r.err != nil && r.err != io.EOF {
-			return n, r.err
-		}
 
 		if nread > 0 {
 			nconv := r.conv.Process(r.obuf, r.ibuf[:nread])
@@ -121,24 +107,6 @@ func (r *ConvReader) Read(p []byte) (n int, err error) {
 			}
 		}
 
-		// If we have reached EOF on the underlying reader,
-		// flush any remaining data.
-		if r.err == io.EOF && !r.flushed {
-			nflush := r.conv.Flush(r.obuf)
-			if nflush > 0 {
-				r.pending = r.obuf[:nflush]
-			}
-			r.flushed = true
-		}
-
-		// If we have reached EOF and there is no pending data, return EOF.
-		if r.err == io.EOF && len(r.pending) == 0 {
-			err = io.EOF
-
-			return
-		}
-
-		// Continue reading and processing data until we have filled p or reached EOF.
 	}
 
 	// Return the number of bytes read and any error encountered.

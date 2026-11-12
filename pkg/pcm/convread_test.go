@@ -14,7 +14,9 @@ package pcm
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
+	"strings"
 	"testing"
 )
 
@@ -60,6 +62,83 @@ func TestConvReader_FlushesPartialFrameAtEOF(t *testing.T) {
 	if !bytes.Equal(output, []byte{0x80}) {
 		// 0x34 -> 0x34 0x00 -> 0x80 (unsigned 8-bit)
 		t.Fatalf("output = %v, want [0x80]", output)
+	}
+}
+
+type dataErrorReader struct {
+	data []byte
+	err  error
+}
+
+func (r *dataErrorReader) Read(p []byte) (int, error) {
+	n := copy(p, r.data)
+	r.data = r.data[n:]
+	if len(r.data) == 0 {
+		return n, r.err
+	}
+	return n, nil
+}
+
+func TestConvReader_DataAndEOF(t *testing.T) {
+	ifmt := mustReaderFormat(t, SLE16Mono44k)
+	ofmt := mustReaderFormat(t, U8Mono8k)
+	ofmt.sampleRate = ifmt.sampleRate
+
+	for _, readSize := range []int{1, 8} {
+		t.Run(fmt.Sprintf("read-size-%d", readSize), func(t *testing.T) {
+			conv, err := NewConverter(ofmt, ifmt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reader := OpenConv(&dataErrorReader{data: []byte{0, 0x40, 0x34}, err: io.EOF}, conv)
+			var got []byte
+			buf := make([]byte, readSize)
+			for {
+				n, err := reader.Read(buf)
+				got = append(got, buf[:n]...)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if want := []byte{0xc0, 0x80}; !bytes.Equal(got, want) {
+				t.Fatalf("output = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+func TestConvReader_DataAndNonEOFError(t *testing.T) {
+	ifmt := mustReaderFormat(t, SLE16Mono44k)
+	ofmt := mustReaderFormat(t, U8Mono8k)
+	ofmt.sampleRate = ifmt.sampleRate
+	readErr := errors.New("source failure")
+
+	for _, readSize := range []int{1, 8} {
+		t.Run(fmt.Sprintf("read-size-%d", readSize), func(t *testing.T) {
+			conv, err := NewConverter(ofmt, ifmt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reader := OpenConv(&dataErrorReader{data: []byte{0, 0x40, 0, 0xc0}, err: readErr}, conv)
+			var got []byte
+			buf := make([]byte, readSize)
+			for {
+				n, err := reader.Read(buf)
+				got = append(got, buf[:n]...)
+				if err != nil {
+					if !errors.Is(err, ErrRead) || !strings.Contains(err.Error(), readErr.Error()) {
+						t.Fatalf("error = %v, want %v", err, readErr)
+					}
+					break
+				}
+			}
+			if want := []byte{0xc0, 0x40}; !bytes.Equal(got, want) {
+				t.Fatalf("output = %v, want %v", got, want)
+			}
+		})
 	}
 }
 
