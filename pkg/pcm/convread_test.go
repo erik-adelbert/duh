@@ -71,6 +71,70 @@ type dataErrorReader struct {
 	err  error
 }
 
+type emptyThenDataReader struct {
+	empty int
+	data  []byte
+	reads int
+}
+
+func (r *emptyThenDataReader) Read(p []byte) (int, error) {
+	r.reads++
+	if r.empty > 0 {
+		r.empty--
+		return 0, nil
+	}
+	if len(r.data) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(p, r.data)
+	r.data = r.data[n:]
+	return n, nil
+}
+
+func TestConvReaderNoProgress(t *testing.T) {
+	format := mustReaderFormat(t, SLE16Mono44k)
+	newReader := func(source io.Reader) *ConvReader {
+		t.Helper()
+		conv, err := NewConverter(format, format)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return OpenConv(source, conv)
+	}
+	t.Run("bounded and recoverable", func(t *testing.T) {
+		source := &emptyThenDataReader{empty: maxEmptyReads, data: []byte{1, 2}}
+		reader := newReader(source)
+		buf := make([]byte, 2)
+		if n, err := reader.Read(buf); n != 0 || !errors.Is(err, io.ErrNoProgress) {
+			t.Fatalf("Read = (%d, %v), want no progress", n, err)
+		}
+		if source.reads != maxEmptyReads {
+			t.Fatalf("source reads = %d, want %d", source.reads, maxEmptyReads)
+		}
+		if n, err := reader.Read(buf); n != 2 || err != nil || !bytes.Equal(buf, []byte{1, 2}) {
+			t.Fatalf("retry = (%d, %v, %v)", n, err, buf)
+		}
+	})
+	t.Run("partial output", func(t *testing.T) {
+		source := io.MultiReader(bytes.NewReader([]byte{1, 2}), &emptyThenDataReader{empty: maxEmptyReads})
+		reader := newReader(source)
+		buf := make([]byte, 4)
+		if n, err := reader.Read(buf); n != 2 || !errors.Is(err, io.ErrNoProgress) || !bytes.Equal(buf[:n], []byte{1, 2}) {
+			t.Fatalf("Read = (%d, %v, %v)", n, err, buf[:n])
+		}
+	})
+	t.Run("intermittent progress", func(t *testing.T) {
+		source := io.MultiReader(
+			&emptyThenDataReader{empty: maxEmptyReads - 1, data: []byte{1}},
+			&emptyThenDataReader{empty: maxEmptyReads - 1, data: []byte{2}},
+		)
+		got, err := io.ReadAll(newReader(source))
+		if err != nil || !bytes.Equal(got, []byte{1, 2}) {
+			t.Fatalf("ReadAll = (%v, %v)", got, err)
+		}
+	})
+}
+
 func (r *dataErrorReader) Read(p []byte) (int, error) {
 	n := copy(p, r.data)
 	r.data = r.data[n:]

@@ -64,9 +64,12 @@ func (r *ConvReader) Read(p []byte) (n int, err error) {
 	}
 
 	defer func() {
-		err = mkError(ErrRead, err)
+		if err != io.ErrNoProgress {
+			err = mkError(ErrRead, err)
+		}
 	}()
 
+	nempty := 0
 	for n < len(p) {
 		// If there is pending converted data, copy it to p first.
 		if len(r.pending) > 0 {
@@ -101,6 +104,16 @@ func (r *ConvReader) Read(p []byte) (n int, err error) {
 		var nread int
 		nread, r.err = r.r.Read(r.ibuf)
 
+		if nread == 0 && r.err == nil {
+			nempty++
+			if nempty >= maxEmptyReads {
+				err = io.ErrNoProgress
+				return
+			}
+			continue
+		}
+
+		nempty = 0
 		if nread > 0 {
 			nconv := r.conv.Process(r.obuf, r.ibuf[:nread])
 
@@ -108,7 +121,6 @@ func (r *ConvReader) Read(p []byte) (n int, err error) {
 				r.pending = r.obuf[:nconv]
 			}
 		}
-
 	}
 
 	// Return the number of bytes read and any error encountered.
@@ -197,4 +209,7 @@ func (r *ConvReader) Seek(offset int64, whence int) (off int64, err error) {
 	return
 }
 
-const kB = 1024
+const (
+	kB            = 1024
+	maxEmptyReads = 100
+)
