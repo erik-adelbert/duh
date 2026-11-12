@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/erik-adelbert/duh/pkg/backend"
-	offcalc "github.com/erik-adelbert/duh/pkg/offset"
+	o "github.com/erik-adelbert/duh/pkg/offset"
 )
 
 type Controller struct {
@@ -82,7 +82,7 @@ func (c *Controller) position() (Position, Position, error) {
 	nch := c.p.ChannelCount()
 	bps := c.p.BitDepth() / 8
 
-	pos, err := offcalc.Scale(off, int64(spr)*int64(nch)*int64(bps), int64(time.Second))
+	pos, err := o.Scale(off, int64(spr)*int64(nch)*int64(bps), int64(time.Second))
 	if err != nil {
 		return 0, 0, fmt.Errorf("playback time: %w", err)
 	}
@@ -97,7 +97,7 @@ func (c *Controller) offset(p Position) (int64, error) {
 	nch := c.p.ChannelCount()
 	bps := c.p.BitDepth() / 8
 
-	return offcalc.Scale(int64(p), int64(time.Second), int64(spr)*int64(nch)*int64(bps))
+	return o.Scale(int64(p), int64(time.Second), int64(spr)*int64(nch)*int64(bps))
 }
 
 func (c *Controller) Rewind() error {

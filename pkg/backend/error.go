@@ -7,7 +7,7 @@ package backend
 import (
 	"errors"
 
-	offcalc "github.com/erik-adelbert/duh/pkg/offset"
+	o "github.com/erik-adelbert/duh/pkg/offset"
 	"github.com/erik-adelbert/duh/pkg/xerror"
 )
 
@@ -23,7 +23,7 @@ var (
 	ErrSeek   = errp.Export("seek error")
 	ErrESPIPE = errors.New("illegal seek")
 	// ErrOffsetOverflow indicates that a position cannot fit in an int64.
-	ErrOffsetOverflow = offcalc.ErrOverflow
+	ErrOffsetOverflow = o.ErrOverflow
 )
 
 var mkError = errp.MkError

@@ -154,11 +154,11 @@ func (m *model) View() string {
 }
 
 func (m *model) startTap(cbs []func(float64, float64)) {
-	m.tap.UpdateFunc(sampleCallback(cbs))
+	m.tap.UpdateFunc(sampleCB(cbs))
 	m.tap.Start()
 }
 
-func sampleCallback(cbs []func(float64, float64)) func([]float64, int) {
+func sampleCB(cbs []func(float64, float64)) func([]float64, int) {
 	return func(samples []float64, nchan int) {
 		if len(cbs) == 0 {
 			return

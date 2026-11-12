@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	offcalc "github.com/erik-adelbert/duh/pkg/offset"
+	o "github.com/erik-adelbert/duh/pkg/offset"
 )
 
 type testPlayer struct {
@@ -39,7 +39,7 @@ func TestControllerPositionErrors(t *testing.T) {
 		t.Fatalf("ForwardBy error = %v", err)
 	}
 	c = NewController(&testPlayer{pos: math.MaxInt64})
-	if _, _, _, err := c.Snapshot(); !errors.Is(err, offcalc.ErrOverflow) {
+	if _, _, _, err := c.Snapshot(); !errors.Is(err, o.ErrOverflow) {
 		t.Fatalf("overflow error = %v", err)
 	}
 }

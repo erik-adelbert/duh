@@ -22,7 +22,7 @@ func TestSampleCallbackChannels(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var got [][2]float64
-			cb := sampleCallback([]func(float64, float64){func(left, right float64) {
+			cb := sampleCB([]func(float64, float64){func(left, right float64) {
 				got = append(got, [2]float64{left, right})
 			}})
 			cb(tt.samples, tt.nchan)

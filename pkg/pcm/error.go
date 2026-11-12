@@ -15,7 +15,7 @@ import (
 	"errors"
 	"io"
 
-	off "github.com/erik-adelbert/duh/pkg/offset"
+	o "github.com/erik-adelbert/duh/pkg/offset"
 	"github.com/erik-adelbert/duh/pkg/xerror"
 )
 
@@ -56,7 +56,7 @@ var (
 	ErrESPIPE = errp.Export("illegal seek")
 
 	// ErrOffsetOverflow indicates that a converted position cannot fit in an int64.
-	ErrOffsetOverflow = off.ErrOverflow
+	ErrOffsetOverflow = o.ErrOverflow
 )
 
 var (

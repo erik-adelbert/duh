@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	offcalc "github.com/erik-adelbert/duh/pkg/offset"
+	o "github.com/erik-adelbert/duh/pkg/offset"
 	"github.com/erik-adelbert/duh/pkg/pcm"
 )
 
@@ -108,12 +108,12 @@ func TestOtoPlayerDurationUsesOutputFormat(t *testing.T) {
 			if !seekable {
 				t.Fatal("source should be seekable")
 			}
-			tracker := &tracker{reader: reader, seeker: seeker}
-			mapped, err := offcalc.Scale(start, ifmt.FrameSize(), ofmt.FrameSize())
+			tracker := &tracker{rdr: reader, skr: seeker}
+			mapped, err := o.Scale(start, ifmt.FrameSize(), ofmt.FrameSize())
 			if err != nil {
 				t.Fatal(err)
 			}
-			tracker.offset.Store(mapped)
+			tracker.off.Store(mapped)
 			player := OtoPlayer{Format: ifmt, ofmt: ofmt, tracker: tracker, duration: duration}
 			if got := player.Duration(); got != time.Second {
 				t.Fatalf("duration = %v, want %v", got, time.Second)
@@ -154,8 +154,8 @@ func (r trackerErrorReader) Read(p []byte) (int, error) {
 func TestTrackerOverflowPreservesSourceError(t *testing.T) {
 	sourceErr := errors.New("source failure")
 	for _, source := range []error{nil, io.EOF, sourceErr} {
-		tracker := &tracker{reader: trackerErrorReader{err: source}}
-		tracker.offset.Store(math.MaxInt64)
+		tracker := &tracker{rdr: trackerErrorReader{err: source}}
+		tracker.off.Store(math.MaxInt64)
 		buf := make([]byte, 1)
 		n, err := tracker.Read(buf)
 		if n != 1 || err != source || buf[0] != 42 || !tracker.overflow.Load() {
@@ -197,12 +197,12 @@ func TestOtoPlayerPositionAndSeek(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			tracker := &tracker{reader: reader, seeker: seeker}
-			mapped, err := offcalc.Scale(start, ifmt.FrameSize(), ofmt.FrameSize())
+			tracker := &tracker{rdr: reader, skr: seeker}
+			mapped, err := o.Scale(start, ifmt.FrameSize(), ofmt.FrameSize())
 			if err != nil {
 				t.Fatal(err)
 			}
-			tracker.offset.Store(mapped)
+			tracker.off.Store(mapped)
 			playback := &fakePlayback{reader: tracker}
 			player := &OtoPlayer{Format: ifmt, ofmt: ofmt, tracker: tracker, playback: playback, duration: duration}
 			outFrame := int(ofmt.FrameSize())
@@ -291,7 +291,7 @@ func TestOtoPlayerPositionNonSeekable(t *testing.T) {
 	if err != nil || seekable {
 		t.Fatalf("inspect non-seekable reader = (%v, %v)", seekable, err)
 	}
-	tracker := &tracker{reader: reader}
+	tracker := &tracker{rdr: reader}
 
 	playback := &fakePlayback{reader: tracker}
 	player := &OtoPlayer{Format: f, ofmt: f, tracker: tracker, playback: playback, duration: duration}
@@ -317,7 +317,7 @@ func TestOtoPlayerPositionConcurrentRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tracker := &tracker{reader: reader}
+	tracker := &tracker{rdr: reader}
 	player := &OtoPlayer{
 		Format: f, ofmt: f, tracker: tracker,
 		playback: &fakePlayback{reader: tracker}, duration: duration,
@@ -351,26 +351,26 @@ func TestOtoPlayerPositionAndSeekOverflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := &seekCountingReader{Reader: bytes.NewReader(make([]byte, 16))}
-	tracker := &tracker{reader: source, seeker: source}
+	tracker := &tracker{rdr: source, skr: source}
 	playback := &fakePlayback{reader: tracker}
 	player := &OtoPlayer{Format: ifmt, ofmt: ofmt, tracker: tracker, playback: playback}
-	tracker.offset.Store(math.MaxInt64)
-	if _, err := player.Position(); !errors.Is(err, offcalc.ErrOverflow) {
+	tracker.off.Store(math.MaxInt64)
+	if _, err := player.Position(); !errors.Is(err, o.ErrOverflow) {
 		t.Fatalf("Position error = %v, want overflow", err)
 	}
-	if _, err := player.Seek(1, io.SeekCurrent); !errors.Is(err, offcalc.ErrOverflow) || playback.seeks != 0 {
+	if _, err := player.Seek(1, io.SeekCurrent); !errors.Is(err, o.ErrOverflow) || playback.seeks != 0 {
 		t.Fatalf("relative seek = %v, seeks %d", err, playback.seeks)
 	}
-	tracker.offset.Store(2)
-	if _, err := player.Seek(math.MaxInt64, io.SeekCurrent); !errors.Is(err, offcalc.ErrOverflow) || playback.seeks != 0 {
+	tracker.off.Store(2)
+	if _, err := player.Seek(math.MaxInt64, io.SeekCurrent); !errors.Is(err, o.ErrOverflow) || playback.seeks != 0 {
 		t.Fatalf("relative addition = %v, seeks %d", err, playback.seeks)
 	}
-	tracker.offset.Store(math.MaxInt64)
+	tracker.off.Store(math.MaxInt64)
 	var buf [1]byte
 	if n, err := tracker.Read(buf[:]); n != 1 || err != nil {
 		t.Fatalf("tracker Read = %d, %v", n, err)
 	}
-	if _, err := player.Position(); !errors.Is(err, offcalc.ErrOverflow) {
+	if _, err := player.Position(); !errors.Is(err, o.ErrOverflow) {
 		t.Fatalf("Position after counter overflow = %v", err)
 	}
 	if _, err := player.Seek(0, io.SeekStart); err != nil {

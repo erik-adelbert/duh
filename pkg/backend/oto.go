@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/ebitengine/oto/v3"
-	offcalc "github.com/erik-adelbert/duh/pkg/offset"
+	o "github.com/erik-adelbert/duh/pkg/offset"
 	"github.com/erik-adelbert/duh/pkg/pcm"
 )
 
@@ -100,45 +100,55 @@ type OtoPlayer struct {
 
 	tracker  *tracker
 	playback positioner
-	mu       sync.Mutex
 	duration time.Duration
+
+	mu sync.Mutex
 }
 
 // NewPlayer creates a player and captures seekable stream metadata
 // before playback begins. Non-seekable streams have an unknown duration.
-func (b *OtoBackend) NewPlayer(r io.Reader) (*OtoPlayer, error) {
+func (b *OtoBackend) NewPlayer(r io.Reader) (p *OtoPlayer, err error) {
+	defer func() {
+		err = mkError(ErrBackend, err)
+	}()
+
 	if r == nil {
-		return nil, fmt.Errorf("nil audio reader")
+		err = fmt.Errorf("nil audio reader")
+		return
 	}
 
-	start, duration, seekable, err := inspectReader(r, b.Format)
+	start, dur, seekable, err := inspectReader(r, b.Format)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	r, rs, err := b.prepReader(r)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	if !seekable {
 		rs = nil
 	}
 
-	tracker := &tracker{reader: r, seeker: rs}
-	initial, err := offcalc.Scale(start, b.FrameSize(), b.ofmt.FrameSize())
+	tracker := &tracker{rdr: r, skr: rs}
+
+	off0, err := o.Scale(start, b.FrameSize(), b.ofmt.FrameSize())
 	if err != nil {
-		return nil, fmt.Errorf("initial audio position: %w", err)
+		err = fmt.Errorf("initial audio position: %w", err)
+		return
 	}
-	tracker.offset.Store(initial)
+	tracker.off.Store(off0)
+
 	player := b.Context.NewPlayer(tracker)
+
 	return &OtoPlayer{
 		Player:   player,
 		Format:   b.Format,
 		ofmt:     b.ofmt,
 		tracker:  tracker,
 		playback: player,
-		duration: duration,
+		duration: dur,
 	}, nil
 }
 
@@ -149,19 +159,24 @@ func inspectReader(r io.Reader, format pcm.Format) (int64, time.Duration, bool, 
 	}
 	var start, end int64
 	start, err := rs.Seek(0, io.SeekCurrent)
+
 	switch {
 	case errors.Is(err, pcm.ErrESPIPE), errors.Is(err, syscall.ESPIPE):
 		return 0, 0, false, nil
 	case err != nil:
 		return 0, 0, false, fmt.Errorf("get initial audio position: %w", err)
 	}
+
 	end, err = rs.Seek(0, io.SeekEnd)
+
 	if err != nil {
 		return 0, 0, false, fmt.Errorf("get audio duration: %w", err)
 	}
+
 	if _, err = rs.Seek(start, io.SeekStart); err != nil {
 		return 0, 0, false, fmt.Errorf("restore initial audio position: %w", err)
 	}
+
 	return start, format.Duration(end), true, nil
 }
 
@@ -197,40 +212,49 @@ type positioner interface {
 }
 
 type tracker struct {
-	reader   io.Reader
-	seeker   io.Seeker
-	offset   atomic.Int64
+	rdr io.Reader
+	skr io.Seeker
+	off atomic.Int64
+
 	overflow atomic.Bool
 }
 
 func (r *tracker) Read(p []byte) (int, error) {
-	n, err := r.reader.Read(p)
+	n, err := r.rdr.Read(p)
 	for {
-		old := r.offset.Load()
-		next, addErr := offcalc.Add(old, int64(n))
+		old := r.off.Load()
+		nxt, addErr := o.Add(old, int64(n))
+
 		if addErr != nil {
 			r.overflow.Store(true)
 			return n, err
 		}
-		if r.offset.CompareAndSwap(old, next) {
+
+		if r.off.CompareAndSwap(old, nxt) {
 			break
 		}
 	}
+
 	return n, err
 }
 
-func (r *tracker) Seek(offset int64, whence int) (int64, error) {
-	if r.seeker == nil {
+func (r *tracker) Seek(offset int64, whence int) (pos int64, err error) {
+	if r.skr == nil {
 		return 0, ErrESPIPE
 	}
-	pos, err := r.seeker.Seek(offset, whence)
+
+	pos, err = r.skr.Seek(offset, whence)
+
 	if err == nil {
-		r.offset.Store(pos)
+		r.off.Store(pos)
 		r.overflow.Store(false)
 	}
-	return pos, err
+
+	return
 }
 
+// Seek seeks to the specified offset in the audio stream. It returns the new
+// position and any error encountered.
 func (p *OtoPlayer) Seek(offset int64, whence int) (n int64, err error) {
 	defer func() {
 		if err != nil && !errors.Is(err, ErrESPIPE) {
@@ -240,7 +264,7 @@ func (p *OtoPlayer) Seek(offset int64, whence int) (n int64, err error) {
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.tracker.seeker == nil {
+	if p.tracker.skr == nil {
 		return 0, ErrESPIPE
 	}
 
@@ -249,23 +273,27 @@ func (p *OtoPlayer) Seek(offset int64, whence int) (n int64, err error) {
 		if err != nil {
 			return 0, err
 		}
-		offset, err = offcalc.Add(pos, offset)
+		offset, err = o.Add(pos, offset)
 		if err != nil {
 			return 0, err
 		}
 		whence = io.SeekStart
 	}
-	offset, err = offcalc.Scale(offset, p.FrameSize(), p.ofmt.FrameSize())
+
+	offset, err = o.Scale(offset, p.FrameSize(), p.ofmt.FrameSize())
 	if err != nil {
 		return 0, err
 	}
+
 	pos, err := p.playback.Seek(offset, whence)
 	if err != nil {
 		return 0, err
 	}
-	return offcalc.Scale(pos, p.ofmt.FrameSize(), p.FrameSize())
+
+	return o.Scale(pos, p.ofmt.FrameSize(), p.FrameSize())
 }
 
+// Duration returns the total duration of the audio stream.
 func (p *OtoPlayer) Duration() time.Duration { return p.duration }
 
 // Position estimates bytes played in the input format, excluding Oto's buffer.
@@ -279,10 +307,10 @@ func (p *OtoPlayer) Position() (int64, error) {
 
 func (p *OtoPlayer) pos() (int64, error) {
 	if p.tracker.overflow.Load() {
-		return 0, fmt.Errorf("audio position: %w", offcalc.ErrOverflow)
+		return 0, fmt.Errorf("audio position: %w", o.ErrOverflow)
 	}
-	off := max(p.tracker.offset.Load()-int64(p.playback.BufferedSize()), 0)
-	return offcalc.Scale(off, p.ofmt.FrameSize(), p.FrameSize())
+	off := max(p.tracker.off.Load()-int64(p.playback.BufferedSize()), 0)
+	return o.Scale(off, p.ofmt.FrameSize(), p.FrameSize())
 }
 
 func isOtoFormat(format pcm.Format) bool {

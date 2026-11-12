@@ -16,7 +16,7 @@ import (
 	"io"
 	"math"
 
-	offcalc "github.com/erik-adelbert/duh/pkg/offset"
+	o "github.com/erik-adelbert/duh/pkg/offset"
 )
 
 // ConvReader converts PCM data read from r using conv.
@@ -178,7 +178,7 @@ func (r *ConvReader) Seek(offset int64, whence int) (off int64, err error) {
 	ifsz := int64(ifmt.frameSize)
 	ofsz := int64(ofmt.frameSize)
 
-	iff, err := offcalc.Scale(offset, ofsz, ifsz)
+	iff, err := o.Scale(offset, ofsz, ifsz)
 	if err != nil {
 		return 0, err
 	}
@@ -196,7 +196,7 @@ func (r *ConvReader) Seek(offset int64, whence int) (off int64, err error) {
 
 	r.conv.Reset()
 
-	off, err = offcalc.Scale(iff, ifsz, ofsz)
+	off, err = o.Scale(iff, ifsz, ofsz)
 	return
 }
 
