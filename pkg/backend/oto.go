@@ -99,13 +99,28 @@ func (b *OtoBackend) NewPlayer(r io.Reader) *OtoPlayer {
 		return nil
 	}
 
+	r, rs, err := b.prepReader(r)
+	if err != nil {
+		return nil
+	}
+
+	return &OtoPlayer{
+		Player: b.Context.NewPlayer(r),
+		Format: b.Format,
+
+		r:  r,
+		rs: rs,
+	}
+}
+
+func (b *OtoBackend) prepReader(r io.Reader) (io.Reader, io.ReadSeeker, error) {
 	rs, _ := r.(io.ReadSeeker)
 
 	if b.Format != b.ofmt {
-		cv, err := pcm.NewConverter(b.Format, b.ofmt)
+		cv, err := pcm.NewConverter(b.ofmt, b.Format)
 
 		if err != nil {
-			return nil
+			return nil, nil, err
 		}
 
 		rcv := pcm.OpenConv(r, cv)
@@ -117,13 +132,7 @@ func (b *OtoBackend) NewPlayer(r io.Reader) *OtoPlayer {
 		}
 	}
 
-	return &OtoPlayer{
-		Player: b.Context.NewPlayer(r),
-		Format: b.Format,
-
-		r:  r,
-		rs: rs,
-	}
+	return r, rs, nil
 }
 
 func (b *OtoBackend) Close() {}
