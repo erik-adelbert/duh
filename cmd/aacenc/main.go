@@ -34,7 +34,7 @@ func main() {
 
 	cvfmt, _ := pcm.NewFormat(pcm.SignedIntLE, 16, nchan, sr)
 
-	conv, err := pcm.NewConverter(a.ifmt, cvfmt)
+	conv, err := pcm.NewConverter(cvfmt, a.ifmt)
 	die(err, "Failed to create PCM converter", 1)
 
 	in = io.NopCloser(pcm.OpenConv(in, conv))

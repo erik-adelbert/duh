@@ -28,7 +28,7 @@ func main() {
 	in := io.NopCloser(os.Stdin)
 
 	if a.ifmt != a.ofmt {
-		conv, err := pcm.NewConverter(a.ifmt, a.ofmt)
+		conv, err := pcm.NewConverter(a.ofmt, a.ifmt)
 		die(err, "Failed to create PCM converter", 1)
 
 		in = io.NopCloser(pcm.OpenConv(in, conv))

@@ -30,7 +30,7 @@ func main() {
 	var in io.Reader = os.Stdin
 
 	if a.ifmt != a.ofmt {
-		conv, err := pcm.NewConverter(a.ifmt, a.ofmt)
+		conv, err := pcm.NewConverter(a.ofmt, a.ifmt)
 		die(err, "Failed to create PCM converter", 1)
 
 		in = pcm.OpenConv(in, conv)
