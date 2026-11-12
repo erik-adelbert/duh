@@ -4,7 +4,7 @@
 
 //go:build js && wasm
 
-// vgmweb plays VGM files in the browser (WASM+js) with optional spectrogram and VU bar visualizations.
+// vgmweb plays VGM files in the browser with a spectrogram, VU meters and OPL3 register visualization.
 package main
 
 import (

@@ -1,4 +1,4 @@
-// duh midi driver for OPL3
+// duh ADL midi driver for OPL3
 //
 // Based on:
 //   Wohlstand libADLMIDI

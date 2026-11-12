@@ -1,4 +1,4 @@
-// duh midi driver for OPL3
+// duh ADL midi driver for OPL3
 //
 // Based on:
 //   Wohlstand libADLMIDI
@@ -22,6 +22,7 @@
 //
 // See LICENSE for the complete license text.
 
+// genadlmidi generates OPL3 midi bank files from configuration.
 package main
 
 import (

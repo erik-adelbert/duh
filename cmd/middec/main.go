@@ -1,15 +1,8 @@
-//go:build !windows
+// Copyright (c) 2026 Erik Adelbert. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-// adlmidi-go: A Go port of ADLMIDI (OPL3 emulation MIDI player)
-// Streams raw PCM (S16LE, stereo, 48k) to stdout.
-//
-// Usage:
-//   adlmidi-go [options] <midifilename> [<banknumber> [<numcards> [<numfourops>]]]
-//
-// Options are parsed with Go's flag package. Since Go's flag package stops
-// parsing at the first non-flag argument, all options must come BEFORE the
-// MIDI filename.
-
+// middec decodes MIDI files to raw PCM data using the ADLMIDI/OPL3 emulation.
 package main
 
 import (
