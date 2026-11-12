@@ -132,7 +132,7 @@ func (s *Synth) setCMFInstruments(instruments []adlData) {
 	s.dyno.metas = make([]adlMeta, len(instruments))
 	for i := range instruments {
 		id := uint16(i) | DynamicInstrumentTag
-		s.dyno.metas[i] = adlMeta{ID0: id, ID1: id, KON: 1000, KOFF: 500}
+		s.dyno.metas[i] = adlMeta{ID0: id, ID1: id, KON: time.Second, KOFF: 500 * time.Millisecond}
 	}
 }
 
@@ -455,7 +455,7 @@ func (m *Synth) ChannelScore(c0, ins, midCh uint32) int64 {
 				}
 
 				for _, mData := range m.achans[c1].users {
-					if mData.sustained != holdNone || mData.vibDelay >= 200 || mData.ins != data.ins {
+					if mData.sustained != holdNone || mData.vibDelay >= 200*time.Millisecond || mData.ins != data.ins {
 						continue
 					}
 
@@ -478,7 +478,7 @@ func (s *Synth) PrepareForNewNote(c, ins int) {
 
 	for loc, data := range s.achans[c].users {
 		if data.sustained == holdNone {
-			if (data.vibDelay < 70 || data.KONDecay > 20000) && data.ins == uint16(ins) {
+			if (data.vibDelay < 70*time.Millisecond || data.KONDecay > 20*time.Second) && data.ins == uint16(ins) {
 				continue // Do arpeggio
 			}
 			s.MoveOrKill(uint32(c), loc, data)
@@ -507,7 +507,7 @@ func (s *Synth) MoveOrKill(fromChannel uint32, loc location, data locData) {
 		}
 
 		for _, locdat := range s.achans[c].users {
-			if locdat.vibDelay >= 200 && locdat.KONDecay < 10000 {
+			if locdat.vibDelay >= 200*time.Millisecond && locdat.KONDecay < 10*time.Second {
 				continue
 			}
 
@@ -730,10 +730,12 @@ func (s *Synth) UpdateArpeggio(_ time.Duration) {
 			data := s.achans[c].users[loc]
 
 			if data.sustained == holdNone {
+				mchan32 := uint32(loc.mchan)
+
 				if data.KONDecay <= 0 {
-					s.NoteUpdate(uint32(loc.mchan), loc.note, UpdOff, c)
+					s.NoteUpdate(mchan32, loc.note, UpdOff, c)
 				} else {
-					s.NoteUpdate(uint32(loc.mchan), loc.note, UpdPitch|UpdVolume|UpdPan, c)
+					s.NoteUpdate(mchan32, loc.note, UpdPitch|UpdVolume|UpdPan, c)
 				}
 			}
 		}

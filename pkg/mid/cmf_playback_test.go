@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"io"
 	"testing"
+	"time"
 )
 
 func testCMF(modulator byte) []byte {
@@ -111,6 +112,9 @@ func TestCMFReloadReplacesInstrumentBank(t *testing.T) {
 		}
 		if len(s.dyno.ins) != 1 || len(s.dyno.metas) != 1 {
 			t.Fatalf("bank sizes after reload = %d/%d, want 1/1", len(s.dyno.ins), len(s.dyno.metas))
+		}
+		if meta := s.dyno.metas[0]; meta.KON != time.Second || meta.KOFF != 500*time.Millisecond {
+			t.Errorf("CMF durations = %s/%s, want 1s/500ms", meta.KON, meta.KOFF)
 		}
 		s.OPL.patch(0, DynamicInstrumentTag)
 		state, ok := s.OPL.Cards[0].State()
