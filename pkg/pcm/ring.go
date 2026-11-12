@@ -118,8 +118,11 @@ func (r *Ring) writeFrame(frame []byte) {
 	r.n += fs
 }
 
+// ReadWindow copies the complete frames that fit in out, then discards up to
+// hop frames. It returns false without consuming data if no complete frame
+// fits or the full window is not available. Trailing bytes in out are untouched.
 func (r *Ring) ReadWindow(out []byte, hop int) bool {
-	if len(out) == 0 || hop <= 0 {
+	if len(out) < int(r.FrameSize()) || hop <= 0 {
 		return false
 	}
 

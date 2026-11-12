@@ -119,6 +119,59 @@ func TestRingWriteDoesNotKeepCallerBuffer(t *testing.T) {
 	}
 }
 
+func TestRingReadWindowSmallBufferPreservesFrames(t *testing.T) {
+	f, err := ParseFormat("s16c2r1000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRing(f, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := seq(8)
+	if _, err := r.Write(data); err != nil {
+		t.Fatal(err)
+	}
+
+	for size := 0; size < int(f.FrameSize()); size++ {
+		out := bytes.Repeat([]byte{0xff}, size)
+		if r.ReadWindow(out, 2) {
+			t.Fatalf("ReadWindow with %d bytes returned true", size)
+		}
+		if !bytes.Equal(out, bytes.Repeat([]byte{0xff}, size)) {
+			t.Fatalf("ReadWindow changed small buffer: %v", out)
+		}
+	}
+	out := make([]byte, len(data))
+	if !r.ReadWindow(out, 2) || !bytes.Equal(out, data) {
+		t.Fatalf("frames after rejected windows = %v, want %v", out, data)
+	}
+	if r.ReadWindow(make([]byte, int(f.FrameSize())-1), 1) {
+		t.Fatal("small window on empty ring returned true")
+	}
+}
+
+func TestRingReadWindowTrailingBytes(t *testing.T) {
+	f, err := ParseFormat("s16c1r1000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRing(f, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Write([]byte{1, 2, 3, 4}); err != nil {
+		t.Fatal(err)
+	}
+	out := []byte{0, 0, 0xff}
+	if !r.ReadWindow(out, 1) || !bytes.Equal(out, []byte{1, 2, 0xff}) {
+		t.Fatalf("window = %v, want [1 2 255]", out)
+	}
+	if !r.ReadWindow(out, 1) || !bytes.Equal(out, []byte{3, 4, 0xff}) {
+		t.Fatalf("second window = %v, want [3 4 255]", out)
+	}
+}
+
 func sum(xs []int) int {
 	total := 0
 	for _, x := range xs {
