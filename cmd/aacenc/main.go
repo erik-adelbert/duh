@@ -27,7 +27,7 @@ type args struct {
 func main() {
 	a := getArgs()
 
-	in := io.NopCloser(os.Stdin)
+	var in io.Reader = os.Stdin
 
 	nchan := a.ifmt.ChannelCount()
 	sr := a.ifmt.SampleRate()
@@ -37,7 +37,7 @@ func main() {
 	conv, err := pcm.NewConverter(cvfmt, a.ifmt)
 	die(err, "Failed to create PCM converter", 1)
 
-	in = io.NopCloser(pcm.OpenConv(in, conv))
+	in = pcm.OpenConv(in, conv)
 
 	out, err := aac.Encode(a.out, a.ofmt)
 	die(err, "Failed to create AAC writer", 1)
@@ -50,9 +50,6 @@ func main() {
 
 	err = a.out.Close()
 	die(err, "Failed to close output", 1)
-
-	err = in.Close()
-	die(err, "Failed to close input", 1)
 }
 
 type flags struct {
@@ -123,8 +120,6 @@ func getArgs() args {
 }
 
 var die = xflags.MkDie(os.Stderr)
-
-const GB = 1 << 30
 
 type writeNopCloser struct {
 	io.Writer

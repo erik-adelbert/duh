@@ -118,8 +118,6 @@ func getArgs() args {
 
 var die = xflags.MkDie(os.Stderr)
 
-const GB = 1 << 30
-
 type writeNopCloser struct {
 	io.Writer
 }
