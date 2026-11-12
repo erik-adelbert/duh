@@ -187,6 +187,8 @@ func (b *OtoBackend) prepReader(r io.Reader) (io.Reader, io.ReadSeeker, error) {
 	return r, rs, nil
 }
 
+// Close is a no-op: Oto supports one process-wide context and does not expose
+// a context close method. Stop players separately before closing their readers.
 func (b *OtoBackend) Close() {}
 
 type positioner interface {
