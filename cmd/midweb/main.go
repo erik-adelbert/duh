@@ -273,10 +273,6 @@ func display(screen Printer, w *webtui, quit <-chan struct{}, audio *JSOut) erro
 		sb strings.Builder
 	)
 
-	const FrameSz = 4 * 1024
-
-	sb.Grow(FrameSz)
-
 	for {
 		select {
 		case <-quit:

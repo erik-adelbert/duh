@@ -272,11 +272,6 @@ func display(screen Printer, w *webtui, quit chan struct{}, audio *JSOut) (err e
 		sb strings.Builder
 	)
 
-	// Preallocate the frame builder
-	const FrameSz = 4 * 1024
-
-	sb.Grow(FrameSz)
-
 	// Event loop
 	for {
 		select {

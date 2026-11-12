@@ -78,3 +78,27 @@ func TestAllSoundsOffImmediatelyClearsNotesAndPedalHolds(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkNoteOnOff(b *testing.B) {
+	m := NewMIDIPlayer(1, 0, 0)
+	base := m.DeviceSelect("test")
+	if err := m.initADLChannels(); err != nil {
+		b.Fatal(err)
+	}
+
+	m.NoteOn(base, 60, 100)
+	if _, ok := m.mchans[base].activeNotes[60]; !ok {
+		b.Fatal("NoteOn did not create an active note")
+	}
+	m.NoteOff(base, 60)
+	if _, ok := m.mchans[base].activeNotes[60]; ok {
+		b.Fatal("NoteOff did not remove the active note")
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		m.NoteOn(base, 60, 100)
+		m.NoteOff(base, 60)
+	}
+}
