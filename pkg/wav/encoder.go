@@ -17,6 +17,7 @@ type Encoder struct {
 	buf []byte
 
 	headerSent bool
+	headerOff  int
 
 	n uint32
 }
@@ -89,15 +90,16 @@ func (w *Encoder) Flush() (err error) {
 	}
 
 	n, err := w.out.Write(w.buf)
+	copy(w.buf, w.buf[n:])
+	w.buf = w.buf[:len(w.buf)-n]
 	if err != nil {
 		return
 	}
 
-	if n < len(w.buf) {
+	if len(w.buf) > 0 {
 		return io.ErrShortWrite
 	}
 
-	w.buf = w.buf[:0]
 	return
 }
 
@@ -127,10 +129,14 @@ func (w *Encoder) Close() error {
 
 			put32(wbuf, p.value)
 
-			_, err = seeker.Write(wbuf)
+			var n int
+			n, err = seeker.Write(wbuf)
 
 			if err != nil {
 				return err
+			}
+			if n != len(wbuf) {
+				return io.ErrShortWrite
 			}
 		}
 	}
@@ -154,7 +160,7 @@ const (
 // WAV file header
 // 0x04: ChunkSize (to be filled in)
 // 0x28: Subchunk2Size (to be filled in)
-var headerTemplate = []byte{
+var headerTemplate = [headersz]byte{
 	0x00: 'R', 'I', 'F', 'F',
 	0x04: 0xff, 0xff, 0xff, 0xff,
 	0x08: 'W', 'A', 'V', 'E',
@@ -168,6 +174,10 @@ var headerTemplate = []byte{
 func (w *Encoder) writeHeader() (n int, err error) {
 	var header = headerTemplate
 
+	if w.headerOff == len(header) {
+		return 0, nil
+	}
+
 	sr := uint32(w.SampleRate())
 	nch := uint16(w.ChannelCount())
 	nbit := uint16(w.BitDepth())
@@ -180,9 +190,10 @@ func (w *Encoder) writeHeader() (n int, err error) {
 	put16(header[offblk:], blkalign)
 	put16(header[offbit:], nbit)
 
-	n, err = w.out.Write(header[:])
+	n, err = w.out.Write(header[w.headerOff:])
+	w.headerOff += n
 
-	if err == nil && n < len(header) {
+	if err == nil && w.headerOff < len(header) {
 		err = io.ErrShortWrite
 	}
 

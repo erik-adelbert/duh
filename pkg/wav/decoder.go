@@ -6,6 +6,7 @@
 package wav
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -114,7 +115,7 @@ func Decode(in io.Reader) (r *Decoder, err error) {
 			rs, _ := in.(io.ReadSeeker)
 
 			return &Decoder{
-				r:      io.LimitReader(in, int64(sz)+1),
+				r:      in,
 				rs:     rs,
 				format: format,
 				doff:   foff,
@@ -190,7 +191,9 @@ func (r *Decoder) ReadAt(p []byte, off int64) (n int, err error) {
 	}
 
 	defer func() {
-		_, err = r.rs.Seek(off0, io.SeekStart)
+		if _, restoreErr := r.rs.Seek(off0, io.SeekStart); restoreErr != nil {
+			err = errors.Join(err, fmt.Errorf("restore read position: %w", restoreErr))
+		}
 	}()
 
 	// Adjust the buffer size if it exceeds the remaining data
@@ -235,6 +238,10 @@ func (r *Decoder) Reset() (err error) {
 
 // Seek sets the read offset for the next Read operation.
 func (r *Decoder) Seek(offset int64, whence int) (n int64, err error) {
+	if r.rs == nil {
+		return 0, mkError(ErrESPIPE, "illegal seek")
+	}
+
 	var dst int64
 
 	errSeek := func(ctx any) error {
