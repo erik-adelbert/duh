@@ -9,8 +9,8 @@ import (
 	"io"
 	"time"
 
-	offcalc "github.com/erik-adelbert/duh/pkg/offset"
 	"github.com/erik-adelbert/duh/pkg/backend"
+	offcalc "github.com/erik-adelbert/duh/pkg/offset"
 )
 
 type Controller struct {
