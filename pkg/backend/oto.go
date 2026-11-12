@@ -208,7 +208,7 @@ func (r *tracker) Read(p []byte) (int, error) {
 		next, addErr := offcalc.Add(old, int64(n))
 		if addErr != nil {
 			r.overflow.Store(true)
-			return n, errors.Join(err, fmt.Errorf("audio position: %w", addErr))
+			return n, err
 		}
 		if r.offset.CompareAndSwap(old, next) {
 			break

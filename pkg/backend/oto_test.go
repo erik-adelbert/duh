@@ -144,6 +144,26 @@ type seekCountingReader struct {
 	seeks int
 }
 
+type trackerErrorReader struct{ err error }
+
+func (r trackerErrorReader) Read(p []byte) (int, error) {
+	p[0] = 42
+	return 1, r.err
+}
+
+func TestTrackerOverflowPreservesSourceError(t *testing.T) {
+	sourceErr := errors.New("source failure")
+	for _, source := range []error{nil, io.EOF, sourceErr} {
+		tracker := &tracker{reader: trackerErrorReader{err: source}}
+		tracker.offset.Store(math.MaxInt64)
+		buf := make([]byte, 1)
+		n, err := tracker.Read(buf)
+		if n != 1 || err != source || buf[0] != 42 || !tracker.overflow.Load() {
+			t.Fatalf("Read = (%d, %v, %v), overflow = %v; want source error %v", n, err, buf, tracker.overflow.Load(), source)
+		}
+	}
+}
+
 func (r *seekCountingReader) Seek(offset int64, whence int) (int64, error) {
 	r.seeks++
 	return r.Reader.Seek(offset, whence)
@@ -347,7 +367,7 @@ func TestOtoPlayerPositionAndSeekOverflow(t *testing.T) {
 	}
 	tracker.offset.Store(math.MaxInt64)
 	var buf [1]byte
-	if n, err := tracker.Read(buf[:]); n != 1 || !errors.Is(err, offcalc.ErrOverflow) {
+	if n, err := tracker.Read(buf[:]); n != 1 || err != nil {
 		t.Fatalf("tracker Read = %d, %v", n, err)
 	}
 	if _, err := player.Position(); !errors.Is(err, offcalc.ErrOverflow) {

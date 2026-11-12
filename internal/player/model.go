@@ -154,23 +154,28 @@ func (m *model) View() string {
 }
 
 func (m *model) startTap(cbs []func(float64, float64)) {
-	cb := func(samples []float64, nchan int) {
+	m.tap.UpdateFunc(sampleCallback(cbs))
+	m.tap.Start()
+}
+
+func sampleCallback(cbs []func(float64, float64)) func([]float64, int) {
+	return func(samples []float64, nchan int) {
 		if len(cbs) == 0 {
 			return
 		}
 
 		for i := 0; i < len(samples); i += nchan {
 			left := samples[i]
-			right := samples[i+1]
+			right := left
+			if nchan > 1 {
+				right = samples[i+1]
+			}
 
 			for _, cb := range cbs {
 				cb(left, right)
 			}
 		}
 	}
-
-	m.tap.UpdateFunc(cb)
-	m.tap.Start()
 }
 
 type Slide int
