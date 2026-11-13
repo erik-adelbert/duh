@@ -11,6 +11,8 @@ Basically, it's a port/remix of [`libADLMIDI`](https://github.com/Wohlstand/libA
 
 duh features a new MIDI decoder and a new [WASM+JS demo](https://erik-adelbert.github.io/duh/midweb). In the new scripts folder, you'll find a first SoX-based reverb bash script that's easy to drop into duh's workflows.
 
-The midi pkg will improve over time—stay tuned!
+The MIDI package also features a bank loader that is binary-compatible with [Bank Editor](https://github.com/Wohlstand/OPL3BankEditor): WOPL/X and other formats are supported.
+
+This pkg will improve over time—stay tuned!
 
 P.S. My personal favs are banks 68 and 79–81 for General MIDI.
