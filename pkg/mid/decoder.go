@@ -363,7 +363,7 @@ func (d *Decoder) Close() error {
 	return nil
 }
 
-func clamp[T ~int32 | ~int](x, min, max T) T {
+func clamp[T ~int32 | ~int | ~int16](x, min, max T) T {
 	switch {
 	case x < min:
 		return min

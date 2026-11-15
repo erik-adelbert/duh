@@ -1,0 +1,19 @@
+.TH MIDSYNTH 1
+.SH NAME
+midsynth \- command-line tool
+.SH SYNOPSIS
+.B midsynth
+.SH DESCRIPTION
+.SH SYNOPSIS
+.B bin/midsynth -in PORT [options] > output.pcm
+Output: 48000 Hz, stereo, signed 16-bit little-endian PCM.
+  -bank int
+    	built-in ADL bank number
+  -cards int
+    	number of OPL3 cards (1..100) (default 4)
+  -four-ops int
+    	hardware 4-op channels (-1 selects automatically) (default -1)
+  -in int
+    	MIDI input port number (required) (default -1)
+  -list
+    	list MIDI input ports on stderr

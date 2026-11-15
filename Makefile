@@ -10,8 +10,7 @@ else
 endif
 
 # Auto-discover all command directories under ./cmd
-# BINARIES := $(notdir $(wildcard cmd/*))
-BINARIES := $(filter-out midweb vgmweb,$(notdir $(wildcard cmd/*)))
+BINARIES := $(filter-out midweb vgmweb,$(notdir $(patsubst %/,%,$(filter %/,$(wildcard cmd/*/)))))
 
 # If BINARY is set, only build that one; otherwise build all
 ifdef BINARY
@@ -20,7 +19,7 @@ else
 	TARGETS := $(BINARIES)
 endif
 
-.PHONY: all build test test-race lint fmt fmt-check vet check clean install tools list pkg-docs man serve-blog utm
+.PHONY: all build test test-race lint fmt fmt-check vet check clean install tools midicat list pkg-docs man serve-blog utm
 
 all: check
 
@@ -88,6 +87,9 @@ clean:
 
 tools:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+midicat:
+	go install gitlab.com/gomidi/tools/midicat@v1.0.7
 
 pkg-docs:
 	GOPROXY=https://proxy.golang.org go list -m github.com/erik-adelbert/duh@main

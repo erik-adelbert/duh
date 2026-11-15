@@ -32,6 +32,9 @@ import (
 )
 
 // Synth maintains MIDI channel and OPL voice state independently of file playback.
+// The RT methods use the unnamed device's 16 channels, creating them on first
+// use. Synth is not safe for concurrent use; callers must serialize events,
+// rendering, and other operations on the same Synth.
 type Synth struct {
 	devices map[string]uint32
 	devID   uint8
@@ -58,6 +61,10 @@ type Synth struct {
 	}
 
 	arpeggio uint32
+
+	rtSamples   []int16
+	rtMix       []int64
+	rtRemainder int64
 }
 
 const NOID = ^uint16(0)

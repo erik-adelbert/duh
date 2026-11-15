@@ -51,10 +51,56 @@ The first tag (`v0.1.0`) will land once the core path is settled. Until then, `m
 go get github.com/erik-adelbert/duh
 ```
 
+## Live MIDI synthesis
+
+`midsynth` reads an existing MIDI input port and writes real-time PCM to
+stdout. It requires the `midicat` executable (version 0.9.x) in `PATH`;
+`midicat` uses native MIDI drivers and is a separate program from `duh`.
+Run `make midicat` to install a compatible version
+with Go; this requires a C/C++ toolchain and platform MIDI development libraries.
+Ensure Go's binary installation directory is in `PATH`. Alternatively, download a
+[binary](https://gitlab.com/gomidi/tools/-/releases)
+
+```sh
+go run ./cmd/midsynth -list
+go run ./cmd/midsynth -in 0 -bank 79 > output.pcm
+```
+
+Output is raw signed 16-bit little-endian stereo at 48 kHz. Pipe it to a
+player configured for that format; player and pipe buffering add latency.
+Use Ctrl-C to stop. `-cards` and `-four-ops` configure the OPL3 voices.
+The program cannot create a virtual MIDI input port; connect an existing
+hardware or virtual input exposed by `midicat`. `midsynth` reports
+unexpected input-process termination.
+
+For a four-measure test melody, install
+[SendMIDI](https://github.com/gbevin/SendMIDI), connect `midsynth` to an
+IAC bus (or another MIDI input), and run:
+
+```sh
+sh scripts/midsynth-twinkle.sh "IAC Driver Bus 1"
+```
+
+The script selects each built-in ADL bank (currently 0 through 81) using DUH
+SysEx, plays the melody, and repeats until interrupted with Ctrl-C. The port
+name defaults to `IAC Driver Bus 1`; use `sendmidi list` to find other output
+ports. `-four-ops` is configured when `midsynth` starts; changing banks via
+SysEx does not recalculate it.
+
+To cycle through banks using a three-second excerpt from the middle of
+`testdata/mid/BohemianRhapsody.mid`, run:
+
+```sh
+sh scripts/midsynth-bohemian.sh "IAC Driver Bus 1"
+```
+
+This script requires Go and restores earlier channel messages when seeking.
+Both scripts send all-sound-off on all 16 MIDI channels between banks.
+
 ## Dependencies
 
 ```sh
-❯ cat go.mod | grep -v duh | grep github | cut -d "/" -f 2,3 | sort | cut -d " " -f 1
+❯ cat go.mod | grep -v duh | grep git | cut -d "/" -f 2,3 | sort | cut -d " " -f 1
 aymanbagabas/go-osc52
 braheezy/shine-mp3
 charmbracelet/bubbletea
@@ -68,6 +114,7 @@ clipperhouse/uax29
 ebitengine/oto
 ebitengine/purego
 erikgeiser/coninput
+gomidi/midi
 hajimehoshi/go-mp3
 jfreymuth/pulse
 lucasb-eyer/go-colorful
