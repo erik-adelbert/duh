@@ -26,7 +26,7 @@ type OPL3State struct {
 }
 
 func NewOPL3State() *OPL3State {
-	const npad = 23
+	const npad = 24
 
 	pads := Mkpad(npad)
 	header := Bold("ml k tl a  d  s  r  o  freq    fbk    wave")
