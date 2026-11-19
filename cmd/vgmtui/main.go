@@ -184,6 +184,7 @@ func play(oto *backend.OtoBackend, in *vgm.Decoder, a args) (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to create audio player: %w", err)
 	}
+	player.SetBufferSize(int(in.Format().BufferSize(100 * time.Millisecond)))
 
 	// Set up signal handling for graceful termination
 	ctrlc, stop := sighandle(os.Interrupt, syscall.SIGTERM)
