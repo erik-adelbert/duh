@@ -211,7 +211,7 @@
     const go = new Go();
 
     WebAssembly.instantiateStreaming(
-      fetch("vgmweb.wasm?v=playback-controls-1"),
+      fetch("vgmweb.wasm?v=header-alignment-1"),
       go.importObject
     )
       .then(({ instance }) => go.run(instance))
