@@ -54,8 +54,8 @@ func BenchmarkSpectroUpdate(b *testing.B) {
 
 	var out strings.Builder
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for i := 0; b.Loop(); i++ {
 		for j := range 1470 {
 			x := float64(i*1470+j) * 2 * math.Pi / 48000
 			sp.Addf64(0.3*math.Sin(x*220) + 0.2*math.Sin(x*1200))
