@@ -193,6 +193,10 @@ The decoder can load a limited subset of IT:
 go run ./cmd/moddec /path/to/song.it | ffplay -nodisp -autoexit -f f32le -sample_rate 48000 -ch_layout stereo -
 ```
 
+IT sample mixing uses the header mixing volume, with legacy ModPlug files using
+their channel-count-dependent preamp. The float output is not limited and can
+exceed full scale.
+
 IT files may also be wrapped in an MMCMP container. IT order skip markers are
 preserved for order jumps. IT support is incomplete:
 only mono or stereo PCM (uncompressed or IT 2.14/2.15 compressed), forward and ping-pong sample loops, volume and

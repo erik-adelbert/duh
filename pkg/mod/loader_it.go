@@ -94,6 +94,9 @@ func loadITDataChannels(data []byte, experimentalMPTM bool, patternChannels int)
 			LegacyModPlug:         u16(40) == 0x217 && u16(42) == 0x200 && u32(60) == 0,
 		},
 	}
+	if !experimentalMPTM {
+		assets.ITMixGain = float32(min(data[49], 128)) / 128
+	}
 
 	assets.ITExtendedFilter = assets.ITCompatibility.ExtendedFilter
 	assets.ITLegacyPitchPan = assets.ITCompatibility.LegacyModPlug
