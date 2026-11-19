@@ -1,0 +1,17 @@
+.TH MODDEC 1
+.SH NAME
+moddec \- command-line tool
+.SH SYNOPSIS
+.B moddec
+.SH DESCRIPTION
+Decode S3M, IT and MPTM files to f32le stereo PCM at 48000 Hz
+.SH SYNOPSIS
+.B bin/moddec [flags] [file]
+.SH OPTIONS
+  -f string
+    path to module file (default: stdin) (default "-")
+  -noloop
+    stop when song playback repeats (sample and finite pattern loops are preserved)
+  -seq int
+    zero-based MPTM sequence index
+  -v	Enable verbose output

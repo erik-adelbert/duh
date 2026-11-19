@@ -97,6 +97,41 @@ sh scripts/midsynth-bohemian.sh "IAC Driver Bus 1"
 This script requires Go and restores earlier channel messages when seeking.
 Both scripts send all-sound-off on all 16 MIDI channels between banks.
 
+## Tracker decoding
+
+`moddec` decodes the tracker formats supported by the `mod` package: S3M,
+IT and an experimental subset of MPTM, including MMCMP-wrapped modules. It
+auto-detects the format from the input; `mod` is the package name, not a claim
+of ProTracker MOD support.
+
+```sh
+go run ./cmd/moddec /path/to/song.it | ffplay -nodisp -autoexit -f f32le -sample_rate 48000 -ch_layout stereo -
+cat /path/to/song.mptm | go run ./cmd/moddec > song.pcm
+```
+
+The command also accepts `-f /path/to/song`; without a path it reads stdin.
+Output is raw 32-bit little-endian float stereo PCM at 48 kHz
+(`f32c2r48000`). Playback warnings and errors go to stderr.
+For MPTM files, `-seq N` selects a zero-based serialized sequence;
+the default is sequence 0. A sequence can contain multiple subsongs, which
+cannot currently be selected individually.
+Use `-noloop` to stop when song playback repeats instead of playing indefinitely;
+finite pattern loops and sample loops still play. MPTM already stops on repeated
+song playback even without the flag.
+
+Go applications can call `mod.Decode(reader)` and read PCM from the returned
+decoder, inspect `Format()` and `Warnings()`, and call `Close()` when done.
+Pass `mod.DecoderOptions{Sequence: N}` to `mod.Decode` to select an MPTM
+sequence; other supported formats accept only sequence 0.
+Decode buffers the input module; audio is rendered incrementally. The decoder
+does not close the supplied reader. It follows the tracker's existing playback
+behavior, so some S3M/IT order loops can play indefinitely. S3M, IT and MPTM
+feature support is incomplete and playback can differ from other players.
+See the [tracker compatibility inventory](documentation/tracker/tracker-compatibility.md) for
+format, effect and profile restrictions, and the
+[tracker development guide](documentation/tracker/tracker-development.md) for implementation
+and reference-test details.
+
 ## Dependencies
 
 ```sh
