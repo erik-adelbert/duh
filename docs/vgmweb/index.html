@@ -60,7 +60,7 @@
     #terminal-frame {
       margin: 10px;
       width: 84ch;
-      height: calc(72 * 13px * 1.1);
+      height: calc(72 * 20px);
       border: 0;
     }
   </style>
@@ -84,7 +84,7 @@
 
   <iframe
     id="terminal-frame"
-    src="vgm.html?v=playback-controls-1"
+    src="vgm.html?v=terminal-size-1"
     title="VGM player"
     allow="autoplay">
   </iframe>
@@ -117,7 +117,11 @@
     });
 
     window.addEventListener("message", event => {
-      if (event.data?.type === "playback-ended") {
+      if (event.source !== terminal.contentWindow) return;
+      if (event.data?.type === "terminal-height") {
+        const height = event.data.height;
+        if (Number.isFinite(height) && height > 0) terminal.style.height = `${Math.ceil(height)}px`;
+      } else if (event.data?.type === "playback-ended") {
         playing = false;
         paused = false;
         pauseButton.disabled = true;

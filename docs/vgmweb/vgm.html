@@ -17,7 +17,6 @@
 
     #terminal {
       width: 84ch;
-      height: calc(72 * 13px * 1.1);
     }
   </style>
 
@@ -160,6 +159,13 @@
     } catch {
       // do nothing, xterm uses the canvas/DOM engine
     }
+
+    const terminalScreen = term.element.querySelector(".xterm-screen");
+    const reportTerminalHeight = () => {
+      post({ type: "terminal-height", height: terminalScreen.getBoundingClientRect().height });
+    };
+    new ResizeObserver(reportTerminalHeight).observe(terminalScreen);
+    reportTerminalHeight();
 
     globalThis.renderScreen = screen => term.write(screen);
 
