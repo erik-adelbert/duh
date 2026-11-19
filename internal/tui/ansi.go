@@ -50,17 +50,17 @@ const (
 	ANSIAltScreenOff = "\033[?1049l"
 )
 
-func barColorBand(i, w int) Colorizer {
+func bandColorIndex(i, w int) int {
 	switch {
 	case i < w/4:
-		return Red
+		return 0
 	case i < w/2:
-		return Yellow
+		return 1
 	case i < 3*w/4:
-		return Green
+		return 2
 	}
 
-	return Cyan
+	return 3
 }
 
 func barColorVu(i, w int) Colorizer {

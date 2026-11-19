@@ -133,18 +133,24 @@ func (sp *Spectro) FRender(sb *strings.Builder, pads string) (n int, err error) 
 		level int
 		peak  int
 		show  bool
-		color Colorizer
+		color int
 	}
 
 	// Precompute the state of each band for rendering
-	states := make([]bandState, len(bands))
+	var smallStates [64]bandState
+	states := smallStates[:]
+	if len(bands) > len(states) {
+		states = make([]bandState, len(bands))
+	} else {
+		states = states[:len(bands)]
+	}
 
 	for j, level := range bands {
 		states[j] = bandState{
 			level: int(level*h*dps + .5),
 			peak:  int(peaks[j] * h * dps),
 			show:  level > .01,
-			color: barColorBand(j, len(bands)),
+			color: bandColorIndex(j, len(bands)),
 		}
 	}
 
@@ -163,15 +169,12 @@ func (sp *Spectro) FRender(sb *strings.Builder, pads string) (n int, err error) 
 		emptyRune = " "
 		peakRune = Bold("⣿")
 
-		blockRunes = []string{
-			brailleBlock(0),
-			brailleBlock(1),
-			brailleBlock(2),
-			brailleBlock(3),
-			brailleBlock(dps),
-		}
-
+		blockRunes = []string{"⠀", "⣀", "⣤", "⣶", "⣿"}
 	}
+
+	colorizers := [4]Colorizer{Red, Yellow, Green, Cyan}
+	var colored [4][5]string
+	var prepared [4][5]bool
 
 	// Build formatted frame for the spectrogram display
 	for i := h; i > 0; i-- {
@@ -187,7 +190,11 @@ func (sp *Spectro) FRender(sb *strings.Builder, pads string) (n int, err error) 
 			case s.peak >= bottom && s.peak < bottom+dps && s.show:
 				sb.WriteString(peakRune) // 🤮
 			case filled > 0:
-				sb.WriteString(s.color(blockRunes[filled])) // 🤓🙄
+				if !prepared[s.color][filled] {
+					colored[s.color][filled] = colorizers[s.color](blockRunes[filled])
+					prepared[s.color][filled] = true
+				}
+				sb.WriteString(colored[s.color][filled]) // 🤓🙄
 			default:
 				sb.WriteString(emptyRune) // 🫥
 			}
@@ -205,17 +212,6 @@ func (sp *Spectro) FRender(sb *strings.Builder, pads string) (n int, err error) 
 	sb.WriteByte('\n')
 
 	return
-}
-
-func brailleBlock(filled int) string {
-	const (
-		brailleBase = 0x2800
-
-		// Braille dot rows, from bottom to top, use bits 7/8, 3/6, 2/5, and 1/4.
-		masks = "\x00\xc0\xe4\xf6\xff"
-	)
-
-	return string(rune(brailleBase | int(masks[filled])))
 }
 
 type logRuler struct {
