@@ -51,42 +51,6 @@ func (s *slot) isRhythm(withRhythm bool) bool {
 }
 
 func (s *slot) doProcess(fbk uint8, withRhythm bool) {
-
-	if s.key == 0 && s.erout == 0x1ff && !s.isRhythm(withRhythm) {
-		if fbk == 0 && s.phinc == 0 && s.out == 0 && *s.mod.i16() == 0 &&
-			s.etks == 0 && *s.trem == 0 && s.phase == 0 && s.rvib == 0 &&
-			s.rwf == 0 {
-
-			s.fbmod = 0
-			s.prout = 0
-			s.eout = 0x1ff
-			s.phrst = false
-			s.egen = envGenRelease
-			s.phout = 0
-
-			return
-		}
-
-		s.calcFeedBack(fbk)
-
-		s.eout = s.erout + s.etks + fp123(*s.trem)
-		s.phrst = false
-		s.egen = envGenRelease
-
-		phinc := s.phinc
-		if s.rvib != 0 {
-			phinc = s.phincs[s.vibPos]
-		}
-
-		phase := uint16(s.phase >> 9)
-		s.phase += phinc
-		s.phout = phase
-
-		s.genSilent()
-
-		return
-	}
-
 	if s.egen == envGenSustain && s.key != 0 && s.erates[envGenSustain] == 0 {
 		s.calcFeedBack(fbk)
 		s.eout = s.erout + fp123(s.etks) + fp123(*s.trem)
@@ -128,26 +92,46 @@ func (s *slot) processInline(writeID uint32, feedback uint8, withRhythm bool) {
 		return
 	}
 
-	// Check if the slot is dormant (inactive) to potentially skip processing.
-	// This is the "fast" in OPL3-Nuked-Fast.
-	dormant := s.key == 0 && s.erout == 0x1ff && s.egen == envGenRelease
-	dormant = dormant && !s.isRhythm(withRhythm)
-	dormant = dormant && feedback == 0 && s.phinc == 0 && s.out == 0 && s.prout == 0
-	dormant = dormant && *s.mod.i16() == 0 && s.etks == 0 && *s.trem == 0
-	dormant = dormant && s.phase == 0 && s.rvib == 0 && s.rwf == 0
+	// A fully attenuated slot still advances its phase and can output -1.
+	if s.key == 0 && s.erout == 0x1ff && !s.isRhythm(withRhythm) {
+		if feedback == 0 && s.phinc == 0 && s.out == 0 && *s.mod.i16() == 0 &&
+			s.etks == 0 && *s.trem == 0 && s.phase == 0 && s.rvib == 0 &&
+			s.rwf == 0 {
+			if s.egen == envGenRelease && s.prout == 0 {
+				if s.trem == s.zero8 {
+					mod, fbmod := s.mod, &s.fbmod
+					from := mod.from()
 
-	if dormant {
-		if s.trem == s.zero8 {
-			mod, fbmod := s.mod, &s.fbmod
-			from := mod.from()
-
-			if mod.i16() == s.zero16 || mod.i16() == fbmod {
-				s.dormantID = writeID
-			} else if from != nil && from.dormantID == writeID {
-				s.dormantID = writeID
+					if mod.i16() == s.zero16 || mod.i16() == fbmod {
+						s.dormantID = writeID
+					} else if from != nil && from.dormantID == writeID {
+						s.dormantID = writeID
+					}
+				}
+				return
 			}
+
+			s.fbmod = 0
+			s.prout = 0
+			s.eout = 0x1ff
+			s.phrst = false
+			s.egen = envGenRelease
+			s.phout = 0
+			return
 		}
 
+		s.calcFeedBack(feedback)
+		s.eout = s.erout + s.etks + fp123(*s.trem)
+		s.phrst = false
+		s.egen = envGenRelease
+
+		phinc := s.phinc
+		if s.rvib != 0 {
+			phinc = s.phincs[s.vibPos]
+		}
+		s.phout = uint16(s.phase >> 9)
+		s.phase += phinc
+		s.genSilent()
 		return
 	}
 
