@@ -17,7 +17,7 @@
 
     #terminal {
       width: 84ch;
-      height: 56em;
+      height: calc(72 * 13px * 1.1);
     }
   </style>
 
@@ -37,6 +37,7 @@
     let playbackStartTime = 0;
     let audioBlocked = false;
     let gestureUnlock = null;
+    let paused = false;
 
     const post = message => parent.postMessage(message, "*");
 
@@ -72,7 +73,7 @@
     }
 
     function installGestureUnlock() {
-      if (!audioContext || audioContext.state === "running" || gestureUnlock) return;
+      if (!audioContext || audioContext.state === "running" || gestureUnlock || paused) return;
       gestureUnlock = async () => {
         if (await unlockAudio()) setAudioUnlocked();
       };
@@ -88,7 +89,7 @@
 
         audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
         audioContext.addEventListener("statechange", () => {
-          if (audioContext.state === "suspended") {
+          if (audioContext.state === "suspended" && !paused) {
             setAudioBlocked();
           } else if (audioContext.state === "running") {
             setAudioUnlocked();
@@ -120,9 +121,30 @@
       return Math.max(0, audioContext.currentTime - playbackStartTime);
     };
 
+    globalThis.playbackPaused = () => paused;
+
+    globalThis.pausePlayback = async () => {
+      paused = true;
+      try {
+        await audioContext.suspend();
+      } catch (error) {
+        paused = false;
+        throw error;
+      }
+    };
+
+    globalThis.resumePlayback = async () => {
+      if (!paused) return;
+      if (!(await unlockAudio())) {
+        throw new Error("Audio could not be resumed. Try again.");
+      }
+      paused = false;
+      setAudioUnlocked();
+    };
+
     const term = new Terminal({
       cols: 84,
-      rows: 50,
+      rows: 72,
       cursorBlink: false,
       convertEol: true,
       scrollback: 0,
@@ -183,7 +205,7 @@
     const go = new Go();
 
     WebAssembly.instantiateStreaming(
-      fetch("vgmweb.wasm"),
+      fetch("vgmweb.wasm?v=playback-controls-1"),
       go.importObject
     )
       .then(({ instance }) => go.run(instance))

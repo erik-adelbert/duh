@@ -11,6 +11,7 @@
   <link rel="shortcut icon" href="favicon.ico" />
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
   <link rel="manifest" href="site.webmanifest" />
+  <script src="screen-wake-lock.js?v=1"></script>
 
   <style>
     html, body {
@@ -59,7 +60,7 @@
     #terminal-frame {
       margin: 10px;
       width: 84ch;
-      height: 1400px;
+      height: calc(72 * 13px * 1.1);
       border: 0;
     }
   </style>
@@ -71,7 +72,9 @@
       <input id="file" type="file" accept=".vgm,.vgz" hidden>
       <button id="choose">Choose VGM</button>
       <button id="play" disabled>Play</button>
+      <button id="pause" disabled>Pause</button>
     </div>
+    <div id="wake-lock-status" role="status"></div>
 
     <div id="info">
       Grab an OPL3 file from OPL Archive.
@@ -81,7 +84,7 @@
 
   <iframe
     id="terminal-frame"
-    src="vgm.html"
+    src="vgm.html?v=playback-controls-1"
     title="VGM player"
     allow="autoplay">
   </iframe>
@@ -91,20 +94,42 @@
     const fileInput = document.getElementById("file");
     const chooseButton = document.getElementById("choose");
     const playButton = document.getElementById("play");
+    const pauseButton = document.getElementById("pause");
     const info = document.getElementById("info");
+    const wakeLockStatus = document.getElementById("wake-lock-status");
     const defaultInfo = "Grab an OPL3 file from OPL Archive.\nPlease don't hammer the site.";
 
     let pendingFile;
     let playbackError = false;
     let audioBlocked = false;
+    let playing = false;
+    let paused = false;
+    let controlPending = false;
+    const playbackWakeLock = new PlaybackWakeLock(
+      navigator.wakeLock,
+      () => document.visibilityState === "visible",
+      message => { wakeLockStatus.textContent = message; }
+    );
+    document.addEventListener("visibilitychange", () => playbackWakeLock.visibilityChanged());
+    window.addEventListener("pagehide", () => playbackWakeLock.stop());
+    window.addEventListener("pageshow", event => {
+      if (event.persisted && playing && !paused) playbackWakeLock.start();
+    });
 
     window.addEventListener("message", event => {
       if (event.data?.type === "playback-ended") {
+        playing = false;
+        paused = false;
+        pauseButton.disabled = true;
+        pauseButton.textContent = "Pause";
+        playbackWakeLock.stop();
         chooseButton.disabled = false;
         if (!playbackError) {
           info.textContent = audioBlocked ? "Tap the player to enable sound" : defaultInfo;
         }
       } else if (event.data?.type === "playback-started") {
+        playing = true;
+        pauseButton.disabled = false;
         if (!audioBlocked) info.textContent = "Playing";
       } else if (event.data?.type === "audio-blocked") {
         audioBlocked = true;
@@ -141,14 +166,50 @@
     playButton.onclick = () => {
       if (!pendingFile) return;
 
-      terminal.contentWindow.postMessage({
-        type: "play",
-        ...pendingFile
-      }, "*");
+      playbackWakeLock.start();
+      try {
+        terminal.contentWindow.postMessage({
+          type: "play",
+          ...pendingFile
+        }, "*");
+      } catch (error) {
+        playbackWakeLock.stop();
+        info.textContent = `Could not start playback: ${error.message || String(error)}`;
+        chooseButton.disabled = false;
+        return;
+      }
 
       pendingFile = null;
       chooseButton.disabled = true;
       playButton.disabled = true;
+    };
+
+    pauseButton.onclick = async () => {
+      if (!playing || controlPending) return;
+      controlPending = true;
+      pauseButton.disabled = true;
+      try {
+        if (paused) {
+          await terminal.contentWindow.resumePlayback();
+          if (!playing) return;
+          paused = false;
+          playbackWakeLock.start();
+          pauseButton.textContent = "Pause";
+          info.textContent = "Playing";
+        } else {
+          await terminal.contentWindow.pausePlayback();
+          if (!playing) return;
+          paused = true;
+          playbackWakeLock.stop();
+          pauseButton.textContent = "Resume";
+          info.textContent = "Paused";
+        }
+      } catch (error) {
+        info.textContent = `Could not ${paused ? "resume" : "pause"}: ${error.message || String(error)}`;
+      } finally {
+        controlPending = false;
+        pauseButton.disabled = !playing;
+      }
     };
   </script>
 </body>

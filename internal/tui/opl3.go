@@ -16,17 +16,11 @@ const (
 	Status
 	Header
 	Chan0
-	Chan1
-	Chan2
-	Chan3
-	Chan4
-	Chan5
-	Chan6
-	Chan7
 )
 
 type OPL3State struct {
-	cache [11]string
+	cache       [Chan0 + opl3.ChannelCount]string
+	initialized bool
 
 	opl3.State
 }
@@ -37,11 +31,9 @@ func NewOPL3State() *OPL3State {
 	pads := Mkpad(npad)
 	header := Bold("ml k tl a  d  s  r  o  freq    fbk    wave")
 
-	return &OPL3State{
-		cache: [11]string{
-			Header: fmt.Sprint(pads, header),
-		},
-	}
+	st := &OPL3State{}
+	st.cache[Header] = fmt.Sprint(pads, header)
+	return st
 }
 
 func (st *OPL3State) Render(sb *strings.Builder, pads string) {
@@ -57,10 +49,10 @@ func (st *OPL3State) Render(sb *strings.Builder, pads string) {
 	sb.WriteString(st.cache[Header])
 	sb.WriteByte('\n')
 
-	for i := range 8 {
+	for i := range opl3.ChannelCount {
 		sb.WriteString(pads)
 		sb.WriteString(strings.ReplaceAll(st.cache[Chan0+i], "\n", "\n"+pads))
-		if i < 7 {
+		if i < opl3.ChannelCount-1 {
 			sb.WriteByte('\n')
 		}
 	}
@@ -68,26 +60,27 @@ func (st *OPL3State) Render(sb *strings.Builder, pads string) {
 
 func (st *OPL3State) Update(sb *strings.Builder, nxt opl3.State) {
 
-	if st.TimerStatus != nxt.TimerStatus {
-		timerStatus(sb, st.TimerStatus)
+	if !st.initialized || st.TimerStatus != nxt.TimerStatus {
+		sb.Reset()
+		timerStatus(sb, nxt.TimerStatus)
 		st.cache[TimerState] = sb.String()
 	}
 
 	nxtStatus := nxt.Status()
 	curStatus := st.Status()
 
-	if curStatus != nxtStatus {
+	if !st.initialized || curStatus != nxtStatus {
 		sb.Reset()
 
 		status(sb, nxtStatus)
 		st.cache[Status] = sb.String()
 	}
 
-	for i := range 8 {
+	for i := range opl3.ChannelCount {
 		nxtCh := nxt.Channel(i)
 		curCh := st.Channel(i)
 
-		if curCh != nxtCh {
+		if !st.initialized || curCh != nxtCh {
 			sb.Reset()
 
 			channel(sb, nxtCh)
@@ -96,6 +89,7 @@ func (st *OPL3State) Update(sb *strings.Builder, nxt opl3.State) {
 	}
 
 	st.State = nxt
+	st.initialized = true
 }
 
 func bit(bit int, u8 uint8) bool {
@@ -103,9 +97,9 @@ func bit(bit int, u8 uint8) bool {
 }
 
 func timerStatus(sb *strings.Builder, tstat uint8) {
-	timer0 := bit(0, tstat)
-	timer1 := bit(1, tstat)
-	expired := bit(2, tstat)
+	timer0 := bit(6, tstat)
+	timer1 := bit(5, tstat)
+	expired := bit(7, tstat)
 
 	t0 := DarkGrey("Timer0")
 	t1 := DarkGrey("Timer1")
@@ -137,15 +131,15 @@ func status(sb *strings.Builder, stat opl3.Flags) {
 	}
 
 	for i, f := range flags[1:] {
-		flags[i+1] = greenFLag(stat.Has(i + 1)).render(f)
+		flags[i+1] = greenFLag(stat.Has(i)).render(f)
 	}
 	sb.WriteString(strings.Join(flags[:], " "))
 }
 
 func channel(sb *strings.Builder, ch opl3.OPL3Channel) {
-	fmt.Fprintf(sb, "Ch%d-0: ", ch.ID)
+	fmt.Fprintf(sb, "Ch%02d-0: ", ch.ID)
 	op(ch.Ops[0]).frender(sb)
-	fmt.Fprintf(sb, "\nCh%d-1: ", ch.ID)
+	fmt.Fprintf(sb, "\nCh%02d-1: ", ch.ID)
 	op(ch.Ops[1]).frender(sb)
 }
 

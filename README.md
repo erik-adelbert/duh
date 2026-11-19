@@ -81,6 +81,12 @@ Run `go test ./...` to test the project. The browser builds are separate:
 - `pcmtui`, `wavtui`, and `vgmtui` play audio with terminal interfaces.
 - `ppunpack` and `unmmcmp` decompress PP20 and MMCMP files.
 
+The OPL3 register view in vgmweb and `vgmtui -opl3` shows both operators on
+all 18 channels. It samples register state, so very brief changes can occur
+between display updates; the full view also needs a tall terminal.
+Vgmweb can pause and resume playback and requests a screen wake lock while
+playing when the browser supports it.
+
 The corresponding library packages live under [`pkg/`](pkg/), including
 `pcm`, `wav`, `mp3`, `tphakala/aac`, `mid`, `mod`, `vgm`, and `opl3`.
 

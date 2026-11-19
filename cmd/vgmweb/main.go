@@ -11,7 +11,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"runtime"
 	"strings"
 	"syscall/js"
 	"time"
@@ -191,53 +190,6 @@ func mktui(in *vgm.Decoder) (io.Reader, *webtui) {
 
 func (w *webtui) Stop() { w.tap.Stop() }
 
-func play(in io.Reader, audio *JSOut) (err error) {
-	buf := make([]byte, 16*1024)
-
-	const (
-		sampleRate    = 44100
-		bytesPerFrame = 4 // stereo s16le
-	)
-
-	var naudio int64
-
-	start := audio.Elapsed()
-
-	bps := int64(sampleRate * bytesPerFrame)
-
-	for {
-		n, err := in.Read(buf)
-
-		if n > 0 {
-			if _, err := audio.Write(buf[:n]); err != nil {
-				return err
-			}
-
-			naudio += int64(n)
-
-			/*
-			 * Keep the decoder approximately synchronized
-			 * with real playback time.
-			 */
-			target := time.Duration(naudio * int64(time.Second) / bps)
-
-			if wait := target - (audio.Elapsed() - start); wait > 2*time.Millisecond {
-				time.Sleep(wait)
-			} else {
-				runtime.Gosched()
-			}
-		}
-
-		switch err {
-		case nil:
-		case io.EOF:
-			return nil
-		default:
-			return err
-		}
-	}
-}
-
 func display(screen Printer, w *webtui, quit chan struct{}, audio *JSOut) (err error) {
 	sp := w.sp
 	vbL := w.vbL
@@ -337,6 +289,10 @@ func NewJSOut() *JSOut {
 
 func (o *JSOut) Elapsed() time.Duration {
 	return time.Duration(js.Global().Call("playbackTime").Float() * float64(time.Second))
+}
+
+func (o *JSOut) Paused() bool {
+	return js.Global().Call("playbackPaused").Bool()
 }
 
 func (o *JSOut) Write(p []byte) (int, error) {

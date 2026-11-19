@@ -18,6 +18,8 @@ package opl3
 
 type Registers [2][256]uint8
 
+const ChannelCount = 18
+
 type OPL3Flag = uint16
 
 const (
@@ -46,57 +48,57 @@ func (regs Registers) Status() Flags {
 	var u16 uint16
 
 	var fourOp uint16
-	if regs[Bank1][0x04] > 0 {
+	if regs[Bank1][0x04]&0x3f != 0 {
 		fourOp = 1
 	}
 
-	u16 |= uint16(bit(7, regs[Bank0][0x01])) << CSM
+	u16 |= uint16(bit(7, regs[Bank0][0x08])) << CSM
 	u16 |= uint16(bit(5, regs[Bank0][0x01])) << WF
 
 	u16 |= uint16(regs[Bank0][0xbd]) << HH // get all drum at once
 
-	u16 |= uint16(bit(1, regs[Bank1][0x05])) << OPL3
+	u16 |= uint16(bit(0, regs[Bank1][0x05])) << OPL3
 	u16 |= uint16(fourOp << FOUROP)
 
 	return Flags(u16)
 }
 
 func (regs Registers) Channel(id int) (ch OPL3Channel) {
-	if uint(id) > 8 {
+	if uint(id) >= ChannelCount {
 		return
 	}
 
 	ch.ID = id
+	bank, local := id/9, id%9
 
 	ops := [2]uint8{
-		opMapping[(id<<1)+0],
-		opMapping[(id<<1)+1],
+		opMapping[(local<<1)+0],
+		opMapping[(local<<1)+1],
 	}
 
-	for bank, o := range ops {
-		b0 := regs[bank][0xb0+id]
+	for index, o := range ops {
+		b0 := regs[bank][0xb0+local]
 
 		fq := uint16(lo2(b0)) << 8
-		fq |= uint16(regs[bank][0xa0+id])
+		fq |= uint16(regs[bank][0xa0+local])
 
 		oct := lo3(b0 >> 2)
 
-		c0 := regs[bank][0xc0+id]
+		c0 := regs[bank][0xc0+local]
 
 		fb := lo3(c0 >> 1)
 
-		var flags OpFlags
+		flags := OpFlags(hi4(regs[bank][0x20+o]))
 
-		if bit(0, regs[bank][0xc0+id]) == 1 {
+		if bit(0, c0) == 1 {
 			flags |= (1 << ALG)
 		}
 
 		if bit(5, b0) == 1 {
 			flags |= (1 << KEY)
-			flags |= OpFlags(hi4(regs[bank][0x20+o]))
 		}
 
-		ch.Ops[bank] = OP{
+		ch.Ops[index] = OP{
 			OpFlags: flags,
 
 			OpState: [9]uint8{
