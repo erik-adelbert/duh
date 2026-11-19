@@ -164,7 +164,8 @@ See [LICENCE](LICENCE) for the project license and the notices in
 code is covered by the project license; see its [notice](pkg/mod/NOTICE)
 and the retained [OpenMPT license](pkg/mod/openmpt-LICENSE) for third-party
 material. Tracker binaries also include LGPL-licensed dependencies.
-Other dependencies may have their own license requirements.
+See the [MIDI notice](pkg/mid/NOTICE) for bank attribution and unresolved
+provenance. Other dependencies may have their own license requirements.
 
 ## llm
 

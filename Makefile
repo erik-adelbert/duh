@@ -45,6 +45,11 @@ midweb:
 	mkdir -p docs/midweb
 	GOOS=js GOARCH=wasm go build -o docs/midweb/midweb.wasm ./cmd/midweb
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" docs/midweb/wasm_exec.js
+	mkdir -p docs/midweb/bank-notices
+	cp pkg/mid/notices/*.txt docs/midweb/bank-notices/
+	cp pkg/mid/LICENCE docs/midweb/LGPL-2.1
+	cp LICENCE docs/midweb/LICENCE
+	cp "$$(go env GOROOT)/LICENSE" docs/midweb/GO-LICENSE
 
 # Show what would be built
 list:

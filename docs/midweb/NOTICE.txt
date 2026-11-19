@@ -1,0 +1,18 @@
+midweb includes the duh MIDI, PCM and OPL3 packages, which contain code
+licensed under the GNU LGPL, version 2.1 or later; see LGPL-2.1.
+The MIDI implementation is based on libADLMIDI by Vitaly Novichkov and
+adlmidi by Joel Yliluoma, and uses DMXOPL definitions by Shannon Freeman.
+The OPL3 implementation is based on Nuked OPL3 by Nuke.YKT and
+Nuked-OPL3-fast by Tony Gies. The PCM implementation is based on the UCB
+release of Plan 9 pcmconv. See the project source for copyright headers.
+
+The embedded MIDI bank database includes material from multiple sources.
+Available license texts and provenance notes are in bank-notices/.
+Some upstream bank sources have unclear permissions; the notices do not
+establish the provenance or licensing of every embedded instrument.
+
+Go's runtime and wasm_exec.js are covered by GO-LICENSE. The project
+license is in LICENCE.
+
+Source code and component notices:
+https://github.com/erik-adelbert/duh

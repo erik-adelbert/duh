@@ -1,0 +1,20 @@
+The MIDI package is based on libADLMIDI by Vitaly Novichkov and adlmidi
+by Joel Yliluoma, and uses DMXOPL definitions by Shannon Freeman. Source
+file headers contain copyright information. The package is licensed under
+the GNU LGPL, version 2.1 or later; see LICENCE.
+
+The embedded adlmidi.dat contains instrument banks. Available upstream
+license texts and provenance notes for bank sources are retained in
+notices/. These include notices for AIL, DMXOPL, FMSynth, IMF90,
+The Fat Man's tone libraries and O'Connell's IBK files.
+
+The locally available generator configuration includes bank sources in
+the upstream greyzone directory. The upstream note in notices/ explains
+that permission for those sources is unclear. The exact provenance and
+licensing of every instrument in the embedded database have not been
+verified; the retained notices do not resolve those questions.
+
+The MIDI package also depends on pcm and opl3, which include code licensed
+under the GNU LGPL, version 2.1 or later. See ../pcm/LICENCE and
+../opl3/LICENCE. Binary distributors should review the applicable license
+terms for the code and banks included in their distribution.
