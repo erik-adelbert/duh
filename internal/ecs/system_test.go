@@ -65,7 +65,7 @@ func TestRegisterSystem_WithInit(t *testing.T) {
 	initCalled := false
 
 	s := &testInitSystem{
-		testSystem:  testSystem{name: "InitSys", priority: SystemPriorityNormal},
+		name: "InitSys", priority: SystemPriorityNormal,
 		initialized: &initCalled,
 	}
 
@@ -115,8 +115,8 @@ func TestUnregisterWithCloser(t *testing.T) {
 	closed := false
 
 	s := &testCloseSystem{
-		testSystem: testSystem{name: "CloseSys", priority: 0},
-		closed:     &closed,
+		name: "CloseSys", priority: 0,
+		closed: &closed,
 	}
 
 	RegisterSystem(w, s)

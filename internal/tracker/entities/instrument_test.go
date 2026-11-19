@@ -17,22 +17,16 @@ import (
 func testInstrument() Instrument {
 	return Instrument{
 		ModuleID: 42,
-		Balance:  core.Balance[uint16]{Vol: 3210, Pan: 40},
-		Envelope: env.Envelope{
-			Flags: env.EnvVolume | env.EnvPanning,
-		},
-		Filter: ins.Filter{CutOff: 99, Resonance: 55},
-		Metadata: ins.Metadata{
-			Name:     "Lead",
-			Filename: "lead.it",
-		},
-		Midi:         ins.Midi{Bank: 10, Prog: 8, Channel: 1, DrumKey: 60},
-		NoteBehavior: ins.NoteBehavior{NNA: 1, DCT: 2, DCA: 3},
-		Mappings: ins.Mappings{
-			Keys:  [128]uint8{0: 1, 1: 2, 2: 3},
-			Notes: [128]uint8{0: 4, 1: 5, 2: 6},
-		},
-		PitchPan:       ins.PitchPan{Separation: 33, Center: 64},
+		Vol:      3210, Pan: 40,
+		Flags:  env.EnvVolume | env.EnvPanning,
+		CutOff: 99, Resonance: 55,
+		Name:     "Lead",
+		Filename: "lead.it",
+		Bank:     10, Prog: 8, Channel: 1, DrumKey: 60,
+		NNA: 1, DCT: 2, DCA: 3,
+		Keys:       [128]uint8{0: 1, 1: 2, 2: 3},
+		Notes:      [128]uint8{0: 4, 1: 5, 2: 6},
+		Separation: 33, Center: 64,
 		Params:         core.Voice[ins.Params]{},
 		Swing:          core.Balance[uint8]{Vol: 15, Pan: 20},
 		DefaultPanning: 90,

@@ -35,9 +35,7 @@ func TestNewEntity_AddsEntityToWorld(t *testing.T) {
 func TestRemoveEntity_RemovesEntityFromWorld(t *testing.T) {
 	w := &World{
 		entities: []id.ID{1, 2, 3},
-		components: components{
-			stores: []componentStore{},
-		},
+		stores:   []componentStore{},
 	}
 	RemoveEntity(w, 2)
 	if len(w.entities) != 2 {
@@ -56,9 +54,7 @@ func TestRemoveEntity_RemovesComponents(t *testing.T) {
 
 	w := &World{
 		entities: []id.ID{1, 2},
-		components: components{
-			stores: []componentStore{ms1, ms2},
-		},
+		stores:   []componentStore{ms1, ms2},
 	}
 	RemoveEntity(w, 1)
 

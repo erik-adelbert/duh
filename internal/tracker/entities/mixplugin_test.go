@@ -31,34 +31,28 @@ func (*mockMixer) MidiCommand(channel, program, note, volume uint32) {}
 func testMixPlugin() MixPlugin {
 	return MixPlugin{
 		ModuleID: 7,
-		State: plugin.State{
-			Flags:    plugin.PluginEnabled | plugin.PluginWetDryMix,
-			VolDecay: core.Stereo[int32]{Left: 11, Right: 22},
-			Out: core.Stereo[[]float32]{
-				Left:  []float32{0.25, 0.5},
-				Right: []float32{0.75, 1.0},
-			},
-			Buf: []int32{3, 4, 5},
+		Flags:    plugin.PluginEnabled | plugin.PluginWetDryMix,
+		VolDecay: core.Stereo[int32]{Left: 11, Right: 22},
+		Out: core.Stereo[[]float32]{
+			Left:  []float32{0.25, 0.5},
+			Right: []float32{0.75, 1.0},
 		},
-		Infos: plugin.Infos{
-			ID1:     101,
-			ID2:     202,
-			Name:    "test-plugin",
-			Library: "test.vst",
-			Routing: struct {
-				In, Out uint32
-				Infos   [4]uint32
-			}{
-				In:    2,
-				Out:   4,
-				Infos: [4]uint32{1, 2, 3, 4},
-			},
+		Buf:     []int32{3, 4, 5},
+		ID1:     101,
+		ID2:     202,
+		Name:    "test-plugin",
+		Library: "test.vst",
+		Routing: struct {
+			In, Out uint32
+			Infos   [4]uint32
+		}{
+			In:    2,
+			Out:   4,
+			Infos: [4]uint32{1, 2, 3, 4},
 		},
 		Mixer: &mockMixer{},
-		Plugin: plugin.Plugin{
-			Data: "opaque",
-			Size: 64,
-		},
+		Data:  "opaque",
+		Size:  64,
 	}
 }
 

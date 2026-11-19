@@ -161,14 +161,14 @@ func TestBankSwitchStopsOnlyAffectedVoices(t *testing.T) {
 	}
 	loc := location{mchan: uint16(base), note: 60}
 	m.mchans[base].activeNotes[60] = &noteInfo{
-		instrument: instrument{Meta: 0}, phys: phys{6: 0},
+		Meta: 0, phys: phys{6: 0},
 	}
 	m.achans[6].users[loc] = locData{ins: 0}
 	held := location{mchan: uint16(base), note: 61}
 	m.achans[7].users[held] = locData{ins: 0, sustained: holdPedal}
 	unaffected := location{mchan: uint16(base), note: 62}
 	m.mchans[base].activeNotes[62] = &noteInfo{
-		instrument: instrument{Meta: 0}, phys: phys{9: 0},
+		Meta: 0, phys: phys{9: 0},
 	}
 	m.achans[9].users[unaffected] = locData{ins: 0}
 

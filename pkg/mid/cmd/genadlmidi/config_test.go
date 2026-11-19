@@ -34,7 +34,7 @@ import (
 func TestConfigOpen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	want := Config{
-		General: General{BankCount: 12, AutoID: true},
+		BankCount: 12, AutoID: true,
 		Banks: map[string]BankInfo{
 			"bank-custom-gm-bank": {
 				Format:  "WOPLX",

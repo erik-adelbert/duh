@@ -194,9 +194,7 @@ func TestEncoderConcurrentHeaders(t *testing.T) {
 	formats := []Format{testFormat(t, "s16c1r44100"), testFormat(t, "u8c2r48000")}
 	var wg sync.WaitGroup
 	for i := range 40 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			f := formats[i%len(formats)]
 			var out bytes.Buffer
 			enc, err := Encode(&out, f)
@@ -218,7 +216,7 @@ func TestEncoderConcurrentHeaders(t *testing.T) {
 			if got := binary.LittleEndian.Uint16(header[offbit:]); got != uint16(f.BitDepth()) {
 				t.Errorf("header bits = %d, want %d", got, f.BitDepth())
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

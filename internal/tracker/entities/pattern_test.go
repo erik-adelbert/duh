@@ -19,10 +19,8 @@ func testPattern() Pattern {
 	return Pattern{
 		ModuleID: 42,
 		Data:     data,
-		Metadata: pattern.Metadata{
-			Name:    "verse-a",
-			Comment: "test pattern",
-		},
+		Name:     "verse-a",
+		Comment:  "test pattern",
 	}
 }
 

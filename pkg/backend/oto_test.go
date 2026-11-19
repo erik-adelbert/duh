@@ -323,13 +323,11 @@ func TestOtoPlayerPositionConcurrentRead(t *testing.T) {
 		playback: &fakePlayback{reader: tracker}, duration: duration,
 	}
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if _, err := io.Copy(io.Discard, tracker); err != nil {
 			t.Error(err)
 		}
-	}()
+	})
 	for range 1000 {
 		if _, err := player.Position(); err != nil {
 			t.Fatal(err)

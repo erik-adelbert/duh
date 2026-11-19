@@ -370,16 +370,14 @@ func TestConvReader_ConcurrentReadAt(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for i := range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			off := i * 127
 			buf := make([]byte, 128)
 			n, err := reader.ReadAt(buf, int64(off))
 			if err != nil || n != len(buf) || !bytes.Equal(buf, want[off:off+len(buf)]) {
 				t.Errorf("ReadAt(%d) = (%d, %v), output mismatch: %v", off, n, err, !bytes.Equal(buf, want[off:off+len(buf)]))
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }
