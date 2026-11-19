@@ -41,9 +41,10 @@ Ordinary and fine pitch slides, tone portamento, glissando, arpeggio and
 vibrato memory have focused comparisons across ST3, IT and Schism profiles;
 other pitch-effect combinations and limits remain partial.
 
-S3M playback uses OpenMPT's fixed random modulation table. Its copyright and
-license are in [openmpt-LICENSE](../../pkg/mod/openmpt-LICENSE); binary
-distributions must include that notice in their accompanying materials.
+The tracker uses OpenMPT as a playback reference and includes material such as
+its fixed random modulation table. See the [tracker notice](../../pkg/mod/NOTICE)
+and [OpenMPT license](../../pkg/mod/openmpt-LICENSE) for attribution and
+distribution requirements.
 
 For IT and MPTM header channel panning, values above 64 other than surround
 (100) leave the channel centered. A channel setting of `FF` uses centered,

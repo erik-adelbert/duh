@@ -1,3 +1,7 @@
+// Original code Copyright (c) 2026 Erik Adelbert.
+// Licensed under the BSD 3-Clause license; see ../../LICENCE.
+// For OpenMPT attribution and dependency licenses, see NOTICE.
+
 package mod
 
 func projectMPTPanbrelloProfile(saved mptSavedPlayBehaviours, version uint32) (itPanbrelloProfile, error) {

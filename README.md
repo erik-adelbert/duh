@@ -5,19 +5,20 @@
 # duh?
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/erik-adelbert/duh.svg)](https://pkg.go.dev/github.com/erik-adelbert/duh)
-> An audio toolkit. Pure Go, no cgo, nothing you didn't ask for.
+> An audio toolkit. Pure Go, no cgo in the toolkit, nothing you didn't ask for.
 
-`duh` is a dev library for Go. It is also a toolkit for working with audio from the shell — decoding, encoding, resampling, and the plumbing in between. Written in pure Go so it builds anywhere Go builds, with no C toolchain, no surprises.
+`duh` is a developer library for Go. It is also a toolkit for working with audio from the shell — decoding, encoding, resampling, and the plumbing in between. The toolkit is written in Go; audio playback and external tools have their own platform requirements.
 
 ## Watch a demo on YouTube
 
 [![duh demo](https://img.youtube.com/vi/ifc32HdhSic/maxresdefault.jpg)](https://www.youtube.com/watch?v=ifc32HdhSic)
 
-Note. Single dependency on `oto`
+Note. The demo uses `oto` for audio output.
 
 ## Try a demo in your browser
 
-[WASM+JS demo](https://erik-adelbert.github.io/duh/)
+- [MIDI demo](https://erik-adelbert.github.io/duh/midweb/)
+- [VGM demo](https://erik-adelbert.github.io/duh/vgmweb/)
 
 ## Status
 
@@ -31,25 +32,56 @@ The first tag (`v0.1.0`) will land once the core path is settled. Until then, `m
 
 ## Goals
 
-- **Pure Go.** `CGO_ENABLED=0` should always build and pass tests.
+- **Pure Go.** Keep the toolkit buildable and testable with `CGO_ENABLED=0`, subject to platform and dependency requirements.
 - **Small surface area.** Do a few things well instead of everything badly.
-- **Predictable.** Unix compliant, no hidden magic.
-- **Portable.** Linux, macOS, Windows, and whatever `GOOS` you're cross-compiling to at 2am.
+- **Predictable.** Unix-compliant, no hidden magic.
+- **Portable.** Aim for Linux, macOS, Windows, and other Go targets where the dependencies are supported.
 - **Efficient.** Fast enough to stay out of the way, honest enough to publish benchmarks instead of claims.
-- **Robust.** Should not fall on the face under any circumstances.
+- **Robust.** Should not fall on its face under any circumstances.
 
 ## Non-goals
 
-- Being a DAW, a synth, or a media player
+- Being a DAW, a full-featured synth, or a general-purpose media player
 - Replacing `ffmpeg` for video
 - Chasing every codec under the sun
 - Winning a benchmark war against a C library
 
 ## Install
 
+The module requires Go 1.27 or newer. To add a package to your Go project:
+
 ```sh
-go get github.com/erik-adelbert/duh
+go get github.com/erik-adelbert/duh/pkg/pcm@main
 ```
+
+There is no package at the module root. See the [package reference](https://pkg.go.dev/github.com/erik-adelbert/duh) for the available packages.
+
+To build the commands from a checkout:
+
+```sh
+make build
+```
+
+This writes binaries to `bin/` and generates their man pages in `man/`.
+Use `make BINARY=pcmconv build` to build one command, or
+`go install ./cmd/pcmconv` to install it into Go's binary installation directory.
+Each command accepts `-h`; the [man pages](man/) contain the same usage information.
+Run `go test ./...` to test the project. The browser builds are separate:
+`make midweb` and `make vgmweb`.
+
+## Toolkit
+
+- `pcmconv` converts and resamples raw PCM; `a440` generates test signals.
+- `wavdec`, `wavenc`, `wavinfo`, `mp3dec`, `mp3enc`, `mp3info`,
+  `aacdec`, `aacenc`, and `aacinfo` work with WAV, MP3 and AAC.
+- `middec` renders MIDI files, `midsynth` handles live MIDI input, and
+  `moddec` renders S3M, IT and experimental MPTM modules.
+- `vgmdec`, `vgminfo`, and `vgmwav` work with VGM files.
+- `pcmtui`, `wavtui`, and `vgmtui` play audio with terminal interfaces.
+- `ppunpack` and `unmmcmp` decompress PP20 and MMCMP files.
+
+The corresponding library packages live under [`pkg/`](pkg/), including
+`pcm`, `wav`, `mp3`, `tphakala/aac`, `mid`, `mod`, `vgm`, and `opl3`.
 
 ## Live MIDI synthesis
 
@@ -59,7 +91,7 @@ stdout. It requires the `midicat` executable (version 0.9.x) in `PATH`;
 Run `make midicat` to install a compatible version
 with Go; this requires a C/C++ toolchain and platform MIDI development libraries.
 Ensure Go's binary installation directory is in `PATH`. Alternatively, download a
-[binary](https://gitlab.com/gomidi/tools/-/releases)
+[binary](https://gitlab.com/gomidi/tools/-/releases).
 
 ```sh
 go run ./cmd/midsynth -list
@@ -73,29 +105,8 @@ The program cannot create a virtual MIDI input port; connect an existing
 hardware or virtual input exposed by `midicat`. `midsynth` reports
 unexpected input-process termination.
 
-For a four-measure test melody, install
-[SendMIDI](https://github.com/gbevin/SendMIDI), connect `midsynth` to an
-IAC bus (or another MIDI input), and run:
-
-```sh
-sh scripts/midsynth-twinkle.sh "IAC Driver Bus 1"
-```
-
-The script selects each built-in ADL bank (currently 0 through 81) using DUH
-SysEx, plays the melody, and repeats until interrupted with Ctrl-C. The port
-name defaults to `IAC Driver Bus 1`; use `sendmidi list` to find other output
-ports. `-four-ops` is configured when `midsynth` starts; changing banks via
-SysEx does not recalculate it.
-
-To cycle through banks using a three-second excerpt from the middle of
-`testdata/mid/BohemianRhapsody.mid`, run:
-
-```sh
-sh scripts/midsynth-bohemian.sh "IAC Driver Bus 1"
-```
-
-This script requires Go and restores earlier channel messages when seeking.
-Both scripts send all-sound-off on all 16 MIDI channels between banks.
+There are 82 built-in ADL banks, numbered 0 through 81. Banks can also be
+changed via DUH SysEx; doing so does not recalculate the `-four-ops` setting.
 
 ## Tracker decoding
 
@@ -109,76 +120,54 @@ go run ./cmd/moddec /path/to/song.it | ffplay -nodisp -autoexit -f f32le -sample
 cat /path/to/song.mptm | go run ./cmd/moddec > song.pcm
 ```
 
-The command also accepts `-f /path/to/song`; without a path it reads stdin.
-Output is raw 32-bit little-endian float stereo PCM at 48 kHz
-(`f32c2r48000`). Playback warnings and errors go to stderr.
-For MPTM files, `-seq N` selects a zero-based serialized sequence;
-the default is sequence 0. A sequence can contain multiple subsongs, which
-cannot currently be selected individually.
-Use `-noloop` to stop when song playback repeats instead of playing indefinitely;
-finite pattern loops and sample loops still play. MPTM already stops on repeated
-song playback even without the flag.
+Without a path, `moddec` reads stdin. Output is raw 32-bit little-endian float
+stereo PCM at 48 kHz. Use `-noloop` to stop when playback repeats, and `-seq N`
+to select an MPTM sequence.
 
-Go applications can call `mod.Decode(reader)` and read PCM from the returned
-decoder, inspect `Format()` and `Warnings()`, and call `Close()` when done.
-Pass `mod.DecoderOptions{Sequence: N}` to `mod.Decode` to select an MPTM
-sequence; other supported formats accept only sequence 0.
-Decode buffers the input module; audio is rendered incrementally. The decoder
-does not close the supplied reader. It follows the tracker's existing playback
-behavior, so some S3M/IT order loops can play indefinitely. S3M, IT and MPTM
-feature support is incomplete and playback can differ from other players.
-See the [tracker compatibility inventory](documentation/tracker/tracker-compatibility.md) for
-format, effect and profile restrictions, and the
-[tracker development guide](documentation/tracker/tracker-development.md) for implementation
-and reference-test details.
+Support is incomplete and playback can differ from other players. See the
+[tracker compatibility inventory](documentation/tracker/tracker-compatibility.md)
+for limitations and the [tracker development guide](documentation/tracker/tracker-development.md)
+for implementation details.
 
 ## Dependencies
 
-```sh
-❯ cat go.mod | grep -v duh | grep git | cut -d "/" -f 2,3 | sort | cut -d " " -f 1
-aymanbagabas/go-osc52
-braheezy/shine-mp3
-charmbracelet/bubbletea
-charmbracelet/colorprofile
-charmbracelet/lipgloss
-charmbracelet/x
-charmbracelet/x
-charmbracelet/x
-clipperhouse/displaywidth
-clipperhouse/uax29
-ebitengine/oto
-ebitengine/purego
-erikgeiser/coninput
-gomidi/midi
-hajimehoshi/go-mp3
-jfreymuth/pulse
-lucasb-eyer/go-colorful
-mattn/go-isatty
-mattn/go-localereader
-mattn/go-runewidth
-muesli/ansi
-muesli/cancelreader
-muesli/termenv
-rivo/uniseg
-tphakala/go-aac
-tphakala/simd
-xo/terminfo
-```
+Go module dependencies are listed in [go.mod](go.mod). Run `go list -m all`
+for the full module graph. Several dependencies come from `bubbletea`, used by
+`wavtui`; the intent is to remove it in time.
 
-Note. Most of it is from `bubbletea` used only in `wavtui` and should be removed in time.
+Audio playback uses `oto` and requires a working platform audio backend.
+On Linux and BSD, Oto uses PulseAudio or loads ALSA at runtime. See
+[Oto's platform notes](https://github.com/ebitengine/oto#platforms) for
+requirements and cross-compilation details. Live MIDI input additionally
+requires the external `midicat` program described above.
 
 ## Credits
 
-`duh` features Go ports more or less reworked but frame exact. Except for [Tomi Hakala's](https://github.com/tphakala) selected works that are treated as a submodule in the repo, the rest is directly integrated at the package level:
+`duh` includes ports and uses libraries and references from other projects:
 
 - pcm: plan9 [libpcm](https://git.9front.org/plan9front/plan9front/4ed03dff937d78f81be88b40cb4cb46372ba9344/sys/src/libpcm)
 - opl3: [Nuked-OPL3](https://github.com/nukeykt/Nuked-OPL3), [Nuked-OPL3-Fast](https://github.com/tgies/Nuked-OPL3-fast)
 - aac: [tphakala](https://github.com/tphakala/go-aac)
 - mp3: [go-mp3](https://github.com/hajimehoshi/go-mp3) + [shine-mp3](https://github.com/braheezy/shine-mp3)
 - midi: [libADLMIDI](https://github.com/Wohlstand/libADLMIDI), [adlMIDI](https://github.com/bisqwit/adlmidi), [DMXOPL](https://github.com/sneakernets/DMXOPL)
+- tracker: [OpenMPT](https://openmpt.org/) is the main playback reference and provides material including the random modulation table and playback definitions
 
-Note. Dear Mr. Cinap-Lenrek, `pcmconv` is back, it has new friends!
+The AAC and MP3 packages use external Go modules; see [go.mod](go.mod).
+
+Note. Dear Mr. Cinap-Lenrek, `pcmconv` is back and it has new friends!
+
+## License
+
+See [LICENCE](LICENCE) for the project license and the notices in
+[`pkg/pcm`](pkg/pcm/LICENCE), [`pkg/opl3`](pkg/opl3/LICENCE), and
+[`pkg/mid`](pkg/mid/LICENCE) for incorporated code. The original tracker
+code is covered by the project license; see its [notice](pkg/mod/NOTICE)
+and the retained [OpenMPT license](pkg/mod/openmpt-LICENSE) for third-party
+material. Tracker binaries also include LGPL-licensed dependencies.
+Other dependencies may have their own license requirements.
 
 ## llm
 
-$10/mth Copilot writes a lot of the comments and even some tests, proofreads, generates social files skeletons, give me on-demand links about state-of-the-art or consensus on programming questions and C deobfuscation and that's pretty much it. Otherwise, `duh` is minimalist, handtyped and carefully curated - You should be able to tell.
+$10/month Copilot writes a lot of the comments and even some tests, proofreads, generates skeletons for social files, gives me on-demand links about the state of the art or consensus on programming questions, and helps with C deobfuscation. That's pretty much it. Otherwise, `duh` is minimalist, hand-typed and carefully curated — you should be able to tell.
+
+$29/month Copilot heavily assisted me with the tracker. More on this later.

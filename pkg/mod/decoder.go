@@ -1,3 +1,9 @@
+// Original code Copyright (c) 2026 Erik Adelbert.
+// Licensed under the BSD 3-Clause license; see ../../LICENCE.
+// For OpenMPT attribution and dependency licenses, see NOTICE.
+
+// Package mod decodes S3M and IT tracker modules and an experimental subset of
+// MPTM into PCM audio.
 package mod
 
 import (

@@ -1,0 +1,13 @@
+The original code in this package is licensed under the project's BSD
+3-Clause license in ../../LICENCE.
+
+This package includes material from OpenMPT, including its random
+modulation table, and uses OpenMPT as a playback reference. See
+openmpt-LICENSE for the OpenMPT copyright notice and license. Retain
+that notice when distributing source, and include it in the documentation
+or other materials accompanying binary distributions.
+
+This package depends on the project's pcm and opl3 packages, which
+include code licensed under the GNU LGPL, version 2.1 or later. See
+../pcm/LICENCE and ../opl3/LICENCE for their licenses. Distributions
+must also comply with the applicable terms for those dependencies.
