@@ -75,7 +75,7 @@ type Chip struct {
 	noiseHH uint32
 	noiseSD uint32
 
-	mixes [2][]*channel // left, right
+	mixes [2][]mixChannel // left, right
 
 	mixBuffer [4]int32
 	mixDirty  bool
@@ -120,9 +120,9 @@ func NewChipWithClock(sampleRate, clockHz int) (chip *Chip) {
 
 		noise: 1,
 
-		mixes: [2][]*channel{
-			make([]*channel, 0, channelCount),
-			make([]*channel, 0, channelCount),
+		mixes: [2][]mixChannel{
+			make([]mixChannel, 0, channelCount),
+			make([]mixChannel, 0, channelCount),
 		},
 
 		mixDirty: true,
@@ -211,9 +211,9 @@ func (c *Chip) Reset() {
 
 	c.sampleCount = 0
 
-	c.mixes = [2][]*channel{
-		make([]*channel, 0, channelCount),
-		make([]*channel, 0, channelCount),
+	c.mixes = [2][]mixChannel{
+		make([]mixChannel, 0, channelCount),
+		make([]mixChannel, 0, channelCount),
 	}
 
 	clear(c.samples[:])
@@ -682,11 +682,11 @@ func (c *Chip) rebuildMixLists() {
 		}
 
 		if ch.cha|ch.chc != 0 {
-			c.mixes[mixLeft] = append(c.mixes[mixLeft], ch)
+			c.mixes[mixLeft] = append(c.mixes[mixLeft], mixChannel{ch, &ch.outL, &ch.chl, &ch.cha, &ch.chc})
 		}
 
 		if ch.chb|ch.chd != 0 {
-			c.mixes[mixRight] = append(c.mixes[mixRight], ch)
+			c.mixes[mixRight] = append(c.mixes[mixRight], mixChannel{ch, &ch.outR, &ch.chr, &ch.chb, &ch.chd})
 		}
 	}
 
@@ -720,6 +720,15 @@ func (c *Chip) makeNoise() {
 
 type mixSide int
 
+// Routing entries point to channel fields so panning and register changes remain visible.
+type mixChannel struct {
+	channel *channel
+	out     *[4]*int16
+	gain    *uint16
+	mask0   *uint16
+	mask1   *uint16
+}
+
 const (
 	mixLeft mixSide = iota
 	mixRight
@@ -728,49 +737,28 @@ const (
 func (c *Chip) mix(side mixSide) {
 	var mix [2]int32
 
-	for _, ch := range c.mixes[side] {
-		// select output channel
-		chout := ch.outR
-		if side == mixLeft {
-			chout = ch.outL
-		}
-
-		// accumulate the outputs of the channel's slots
+	for _, entry := range c.mixes[side] {
+		ch, chout := entry.channel, entry.out
 		acc := *chout[0]
-		for i := 1; i < int(ch.nout); i++ {
-			acc += *chout[i]
+		switch ch.nout {
+		case 4:
+			acc += *chout[3]
+			fallthrough
+		case 3:
+			acc += *chout[2]
+			fallthrough
+		case 2:
+			acc += *chout[1]
 		}
-
-		gain := ch.chr
-		if side == mixLeft {
-			gain = ch.chl
-		}
-
+		gain, mask0, mask1 := *entry.gain, *entry.mask0, *entry.mask1
 		if gain != 0xffff {
 			acc = int16(int32(acc) * int32(gain) / 0xffff)
 		}
 
-		sample := func(x int16, mask uint16) int32 {
-			return int32(int16(uint16(x) & mask))
-		}
-
-		// update the channel's meter with the accumulated output
-
-		// mix channel output into the left/right mix buffers
-		if side == mixLeft {
-			mix[0] += sample(acc, ch.cha)
-			mix[1] += sample(acc, ch.chc)
-
-			if c.channelCB != nil {
-				c.channelCB(ch.id, int(side), sample(acc, ch.cha|ch.chc))
-			}
-		} else {
-			mix[0] += sample(acc, ch.chb)
-			mix[1] += sample(acc, ch.chd)
-
-			if c.channelCB != nil {
-				c.channelCB(ch.id, int(side), sample(acc, ch.chb|ch.chd))
-			}
+		mix[0] += int32(int16(uint16(acc) & mask0))
+		mix[1] += int32(int16(uint16(acc) & mask1))
+		if c.channelCB != nil {
+			c.channelCB(ch.id, int(side), int32(int16(uint16(acc)&(mask0|mask1))))
 		}
 	}
 
