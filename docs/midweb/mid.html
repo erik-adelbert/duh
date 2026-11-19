@@ -38,6 +38,8 @@
     let audioReady = null;
     let bankNames = null;
     let playbackStartTime = 0;
+    let paused = false;
+    let gestureUnlock = null;
     // Keep the buffer size in sync with audioChunkBytes in cmd/midweb/play.go.
     const audioBuffers = new PCMBufferPool(4 * 1024, 8);
 
@@ -66,17 +68,24 @@
     }
 
     function installGestureUnlock() {
-      if (!audioContext || audioContext.state === "running") return;
-      const handler = async () => {
+      if (!audioContext || audioContext.state === "running" || paused || gestureUnlock) return;
+      gestureUnlock = async () => {
+        if (paused) return;
         const ok = await unlockAudio();
-        if (ok) {
-          document.removeEventListener("pointerdown", handler, true);
-          document.removeEventListener("keydown", handler, true);
+        if (ok && !paused) {
+          removeGestureUnlock();
           post({ type: "audio-unlocked" });
         }
       };
-      document.addEventListener("pointerdown", handler, true);
-      document.addEventListener("keydown", handler, true);
+      document.addEventListener("pointerdown", gestureUnlock, true);
+      document.addEventListener("keydown", gestureUnlock, true);
+    }
+
+    function removeGestureUnlock() {
+      if (!gestureUnlock) return;
+      document.removeEventListener("pointerdown", gestureUnlock, true);
+      document.removeEventListener("keydown", gestureUnlock, true);
+      gestureUnlock = null;
     }
 
     async function initAudio() {
@@ -99,13 +108,6 @@
         audioNode.port.onmessage = event => audioBuffers.recycle(event.data);
         audioNode.connect(audioContext.destination);
 
-        const ok = await unlockAudio();
-        if (!ok) {
-          // Autoplay is blocked; fall back to a gesture inside the iframe.
-          // We still return a usable node so WASM can start rendering.
-          installGestureUnlock();
-          post({ type: "audio-blocked" });
-        }
       })();
 
       return audioReady;
@@ -146,6 +148,29 @@
       return Math.max(0, audioContext.currentTime - playbackStartTime);
     };
 
+    globalThis.playbackPaused = () => paused;
+
+    globalThis.pausePlayback = async () => {
+      paused = true;
+      removeGestureUnlock();
+      try {
+        await audioContext.suspend();
+      } catch (error) {
+        paused = false;
+        if (audioContext.state !== "running") installGestureUnlock();
+        throw error;
+      }
+    };
+
+    globalThis.resumePlayback = async () => {
+      if (!paused) return;
+      if (!(await unlockAudio())) {
+        throw new Error("Audio could not be resumed. Try again.");
+      }
+      paused = false;
+      removeGestureUnlock();
+    };
+
     const term = new Terminal({
       cols: 84,
       rows: 50,
@@ -178,6 +203,8 @@
     };
 
     globalThis.playbackEnded = () => {
+      paused = false;
+      removeGestureUnlock();
       post({ type: "playback-ended" });
     };
 
@@ -203,6 +230,10 @@
         document.title = pendingFile.name || "duh midweb";
 
         await initAudio();
+        if (audioContext.state !== "running" && !(await unlockAudio())) {
+          installGestureUnlock();
+          post({ type: "audio-blocked" });
+        }
 
         console.log({
           state: audioContext.state,
@@ -244,7 +275,7 @@
     const go = new Go();
 
     WebAssembly.instantiateStreaming(
-      fetch("midweb.wasm?v=audio-pool-2"),
+      fetch("midweb.wasm?v=pause-1"),
       go.importObject
     )
       .then(({ instance }) => go.run(instance))

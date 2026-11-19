@@ -18,6 +18,7 @@ const (
 type audioOutput interface {
 	io.Writer
 	Elapsed() time.Duration
+	Paused() bool
 }
 
 func play(in io.Reader, audio audioOutput) error {
@@ -26,6 +27,10 @@ func play(in io.Reader, audio audioOutput) error {
 	start := audio.Elapsed()
 
 	for {
+		if audio.Paused() {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
 		n, err := in.Read(buf)
 		if n > 0 {
 			nwritten, writeErr := audio.Write(buf[:n])
@@ -49,8 +54,16 @@ func play(in io.Reader, audio audioOutput) error {
 			}
 		case io.EOF:
 			target := time.Duration(written * int64(time.Second) / audioBytesPerSecond)
-			if wait := target - (audio.Elapsed() - start); wait > 0 {
-				time.Sleep(wait)
+			for {
+				if audio.Paused() {
+					time.Sleep(20 * time.Millisecond)
+					continue
+				}
+				wait := target - (audio.Elapsed() - start)
+				if wait <= 0 {
+					break
+				}
+				time.Sleep(min(wait, 20*time.Millisecond))
 			}
 			return nil
 		default:

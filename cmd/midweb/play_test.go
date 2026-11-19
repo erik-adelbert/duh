@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -30,6 +31,7 @@ func (r *finalEOFReader) Read(p []byte) (int, error) {
 }
 
 func (a *testAudio) Elapsed() time.Duration { return time.Since(a.start) }
+func (a *testAudio) Paused() bool           { return false }
 
 func (a *testAudio) Write(p []byte) (int, error) {
 	if a.err != nil {
@@ -106,5 +108,73 @@ func TestPlayEmptyInput(t *testing.T) {
 	}
 	if audio.output.Len() != 0 {
 		t.Fatal("empty input produced audio")
+	}
+}
+
+type controlledAudio struct {
+	paused       atomic.Bool
+	elapsed      atomic.Int64
+	writes       atomic.Int32
+	pauseOnWrite bool
+}
+
+func (a *controlledAudio) Elapsed() time.Duration { return time.Duration(a.elapsed.Load()) }
+func (a *controlledAudio) Paused() bool           { return a.paused.Load() }
+func (a *controlledAudio) Write(p []byte) (int, error) {
+	if a.pauseOnWrite {
+		a.paused.Store(true)
+	}
+	a.writes.Add(1)
+	return len(p), nil
+}
+
+func TestPauseBeforeRead(t *testing.T) {
+	audio := &controlledAudio{}
+	audio.paused.Store(true)
+	done := make(chan error, 1)
+	go func() { done <- play(bytes.NewReader([]byte{1, 2, 3, 4}), audio) }()
+	time.Sleep(60 * time.Millisecond)
+	if audio.writes.Load() != 0 {
+		t.Fatal("wrote audio while paused")
+	}
+	audio.elapsed.Store(int64(time.Second))
+	audio.paused.Store(false)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("playback did not resume")
+	}
+}
+
+func TestPauseDuringFinalDrain(t *testing.T) {
+	audio := &controlledAudio{pauseOnWrite: true}
+	done := make(chan error, 1)
+	go func() { done <- play(&finalEOFReader{data: []byte{1, 2, 3, 4}}, audio) }()
+	deadline := time.After(time.Second)
+	for audio.writes.Load() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("audio was not written")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("playback ended while paused: %v", err)
+	case <-time.After(60 * time.Millisecond):
+	}
+	audio.elapsed.Store(int64(time.Second))
+	audio.paused.Store(false)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("playback did not finish after resuming")
 	}
 }

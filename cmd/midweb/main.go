@@ -267,6 +267,7 @@ func altScreen(out Printer, on bool) {
 type JSOut struct {
 	acquire js.Value
 	write   js.Value
+	paused  js.Value
 }
 
 func NewJSOut() *JSOut {
@@ -277,11 +278,16 @@ func NewJSOut() *JSOut {
 	return &JSOut{
 		acquire: acquire,
 		write:   js.Global().Get("writeAudio"),
+		paused:  js.Global().Get("playbackPaused"),
 	}
 }
 
 func (o *JSOut) Elapsed() time.Duration {
 	return time.Duration(js.Global().Call("playbackTime").Float() * float64(time.Second))
+}
+
+func (o *JSOut) Paused() bool {
+	return o.paused.Type() == js.TypeFunction && o.paused.Invoke().Bool()
 }
 
 func (o *JSOut) Write(p []byte) (int, error) {

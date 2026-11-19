@@ -103,6 +103,7 @@
         <select id="bank" disabled></select>
       </label>
       <button id="play" type="button" disabled>Play</button>
+      <button id="pause" type="button" disabled>Pause</button>
     </div>
     <div id="info">
         <span id="status">Choose a MIDI file and instrument bank.</span><br>
@@ -113,7 +114,7 @@
 
   <iframe
     id="terminal-frame"
-    src="mid.html?v=audio-pool-2"
+    src="mid.html?v=pause-1"
     title="MIDI player"
     allow="autoplay">
   </iframe>
@@ -127,6 +128,7 @@
     const chooseButton = document.getElementById("choose");
     const bankSelect = document.getElementById("bank");
     const playButton = document.getElementById("play");
+    const pauseButton = document.getElementById("pause");
     const status = document.getElementById("status");
     const fileName = document.getElementById("file-name");
     const wakeLockStatus = document.getElementById("wake-lock-status");
@@ -138,19 +140,24 @@
     document.addEventListener("visibilitychange", () => playbackWakeLock.visibilityChanged());
     window.addEventListener("pagehide", () => playbackWakeLock.stop());
     window.addEventListener("pageshow", event => {
-      if (event.persisted && playing) playbackWakeLock.start();
+      if (event.persisted && playing && started && !paused) playbackWakeLock.start();
     });
 
     let selectedFile = null;
     let wasmReady = false;
     let playing = false;
+    let started = false;
+    let paused = false;
+    let controlPending = false;
+    let audioBlocked = false;
 
     function updateReady() {
-      const ready = wasmReady && selectedFile !== null && !playing;
+      const ready = wasmReady && selectedFile !== null && !playing && !controlPending;
       playButton.disabled = !ready;
       bankSelect.disabled = !wasmReady || playing;
       fileInput.disabled = playing;
       chooseButton.disabled = playing;
+      pauseButton.disabled = !playing || !started || controlPending;
     }
 
     function setStatus(text, state) {
@@ -190,21 +197,29 @@
       } else if (data.type === "banks") {
         globalThis.populateBanks(data.names);
       } else if (data.type === "playback-started") {
-        setStatus("Playing", "playing");
+        started = true;
+        updateReady();
+        if (!audioBlocked) setStatus("Playing", "playing");
       } else if (data.type === "audio-blocked") {
+        audioBlocked = true;
         setStatus("Tap the terminal to enable sound", "error");
       } else if (data.type === "audio-unlocked") {
-        setStatus("Playing", "playing");
+        audioBlocked = false;
+        if (!paused) setStatus("Playing", "playing");
       } else if (data.type === "error") {
         // If the iframe reports an init error (e.g. autoplay blocked),
         // unstick the UI so the user can retry.
-        renderError(String(data.message ?? "unknown error"));
         globalThis.playbackEnded();
+        renderError(String(data.message ?? "unknown error"));
       }
     });
 
     globalThis.playbackEnded = () => {
       playing = false;
+      started = false;
+      paused = false;
+      audioBlocked = false;
+      pauseButton.textContent = "Pause";
       playbackWakeLock.stop();
       if (wasmReady) setStatus(selectedFile ? "Ready" : "Choose a file", "ready");
       updateReady();
@@ -243,7 +258,7 @@
     });
 
     playButton.addEventListener("click", async () => {
-      if (!selectedFile || !wasmReady || playing) return;
+      if (!selectedFile || !wasmReady || playing || controlPending) return;
 
       if (selectedFile.size > MAX_FILE_SIZE) {
         renderError("MIDI files must be 10 MiB or smaller.");
@@ -280,6 +295,35 @@
         setStatus("Ready", "ready");
         updateReady();
         renderError(`Could not start playback: ${err}`);
+      }
+    });
+
+    pauseButton.addEventListener("click", async () => {
+      if (!playing || !started || controlPending) return;
+      controlPending = true;
+      updateReady();
+      try {
+        if (paused) {
+          await terminal.contentWindow.resumePlayback();
+          if (!playing) return;
+          paused = false;
+          audioBlocked = false;
+          playbackWakeLock.start();
+          pauseButton.textContent = "Pause";
+          setStatus("Playing", "playing");
+        } else {
+          await terminal.contentWindow.pausePlayback();
+          if (!playing) return;
+          paused = true;
+          playbackWakeLock.stop();
+          pauseButton.textContent = "Resume";
+          setStatus("Paused", "ready");
+        }
+      } catch (error) {
+        if (playing) setStatus(`Could not ${paused ? "resume" : "pause"}: ${error.message || String(error)}`, "error");
+      } finally {
+        controlPending = false;
+        updateReady();
       }
     });
   </script>
