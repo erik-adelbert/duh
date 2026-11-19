@@ -11,7 +11,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"runtime"
 	"strings"
 	"syscall/js"
 	"time"
@@ -147,7 +146,8 @@ func mktui(in *mid.Decoder) (io.Reader, *webtui) {
 		BandCount = 64
 		MinHz     = 50
 		MaxHz     = 20_000
-		Window    = 2048
+		HopSize   = 1470
+		Window    = HopSize
 	)
 
 	var (
@@ -156,8 +156,6 @@ func mktui(in *mid.Decoder) (io.Reader, *webtui) {
 		sp       tui.Spectro
 		vbL, vbR tui.VuBar
 	)
-
-	var src io.Reader = in
 
 	sp, err = tui.NewSpectro(mid.PCMRate, MinHz, MaxHz, BandCount, false)
 
@@ -168,8 +166,6 @@ func mktui(in *mid.Decoder) (io.Reader, *webtui) {
 	vbL, vbR = tui.NewVuBar(), tui.NewVuBar()
 
 	const (
-		HopSize = 1470
-
 		BufferDuration = 100 * ms
 	)
 
@@ -192,9 +188,7 @@ func mktui(in *mid.Decoder) (io.Reader, *webtui) {
 	})
 	tap.Start()
 
-	src = io.TeeReader(in, tap)
-
-	return src, &webtui{
+	return io.TeeReader(in, tap), &webtui{
 		duration: tui.TimerString(in.Duration()),
 
 		tap: tap,
@@ -206,49 +200,6 @@ func mktui(in *mid.Decoder) (io.Reader, *webtui) {
 }
 
 func (w *webtui) Stop() { w.tap.Stop() }
-
-func play(in io.Reader, audio *JSOut) error {
-	buf := make([]byte, 16*1024)
-
-	const (
-		sampleRate    = 48000
-		bytesPerFrame = 4 // stereo s16le
-	)
-
-	var naudio int64
-
-	start := audio.Elapsed()
-
-	bps := int64(sampleRate * bytesPerFrame)
-
-	for {
-		n, err := in.Read(buf)
-
-		if n > 0 {
-			if _, err := audio.Write(buf[:n]); err != nil {
-				return err
-			}
-
-			naudio += int64(n)
-
-			target := time.Duration(naudio * int64(time.Second) / bps)
-
-			if wait := target - (audio.Elapsed() - start); wait > 2*time.Millisecond {
-				time.Sleep(wait)
-			} else {
-				runtime.Gosched() // behind schedule: wasm has one thread, so let the display run
-			}
-		}
-
-		switch err {
-		case nil:
-		case io.EOF:
-			return nil
-		default:
-			return err
-		}
-	}
-}
 
 func display(screen Printer, w *webtui, quit <-chan struct{}, audio *JSOut) error {
 	const (
