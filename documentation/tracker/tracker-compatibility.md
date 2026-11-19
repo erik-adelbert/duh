@@ -15,6 +15,12 @@ Malformed data can be rejected independently of these tables. For implementation
 and reference-test details, see the
 [tracker development guide](tracker-development.md).
 
+The duration estimator follows this decoder's timing and repeated-state
+behavior without mixing audio. It estimates the selected sequence's first
+pass, not an unlimited repeat or every subsong. Results can differ from other
+players, and particularly complex playback returns an error instead of an
+estimate.
+
 ## Formats, samples and instruments
 
 | Area | S3M | IT | MPTM |

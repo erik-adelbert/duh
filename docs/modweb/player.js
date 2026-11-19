@@ -32,6 +32,7 @@ async function endSession(current, message) {
   if (session !== current) return;
   session = null;
   clearInterval(current.display);
+  clearTimeout(current.durationTimer);
   if (current.node) current.node.disconnect();
   const error = current.opened ? globalThis.closeModule() : null;
   if (current.context) {
@@ -43,6 +44,16 @@ async function endSession(current, message) {
   }
   status.textContent = error ? `${message} ${error}` : message;
   updateControls();
+}
+
+function calculateDuration(current) {
+  if (session !== current) return;
+  const result = globalThis.stepModuleDuration();
+  if (result.error) {
+    warnings.textContent = [warnings.textContent, `Duration unavailable: ${result.error}`].filter(Boolean).join("\n");
+  } else if (!result.done) {
+    current.durationTimer = setTimeout(() => calculateDuration(current), 0);
+  }
 }
 
 function pump(current) {
@@ -160,6 +171,7 @@ play.addEventListener("click", async () => {
     current.node.connect(current.context.destination);
     status.textContent = "Playing.";
     pump(current);
+    current.durationTimer = setTimeout(() => calculateDuration(current), 0);
   } catch (error) {
     await endSession(current, `Playback failed: ${error.message}`);
   }

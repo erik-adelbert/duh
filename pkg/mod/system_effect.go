@@ -606,14 +606,9 @@ func (w *Tracker) applyITVolumeColumnSlide(t TrackID, vID VoiceID, cmd ModComman
 }
 
 func (w *Tracker) applyITSpecialVolumeEffect(t TrackID, vID VoiceID, cmd ModCommand) {
-	arg := cmd.EffectArg
-	if arg&0xf0 == 0xa0 && w.Assets.ITCompatibility.HighOffsetUnsupported {
+	arg, ok := w.rememberITSpecial(t, cmd)
+	if !ok {
 		return
-	}
-	if arg != 0 && w.Clock.Tick == 0 {
-		w.TrackMemories[t].ITLastSpecial = arg
-	} else if arg == 0 {
-		arg = w.TrackMemories[t].ITLastSpecial
 	}
 	w.applyITNoteCut(t, vID, arg, cmd)
 	if w.Clock.Tick != 0 {
@@ -658,6 +653,19 @@ func (w *Tracker) applyITSpecialVolumeEffect(t TrackID, vID VoiceID, cmd ModComm
 			}
 		}
 	}
+}
+
+func (w *Tracker) rememberITSpecial(t TrackID, cmd ModCommand) (uint8, bool) {
+	arg := cmd.EffectArg
+	if arg&0xf0 == 0xa0 && w.Assets.ITCompatibility.HighOffsetUnsupported {
+		return 0, false
+	}
+	if arg != 0 && w.Clock.Tick == 0 {
+		w.TrackMemories[t].ITLastSpecial = arg
+	} else if arg == 0 {
+		arg = w.TrackMemories[t].ITLastSpecial
+	}
+	return arg, true
 }
 
 func (w *Tracker) applyITFineTune(t TrackID, vID VoiceID, cmd ModCommand, arg uint8) {

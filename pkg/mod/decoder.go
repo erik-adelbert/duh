@@ -26,11 +26,13 @@ const (
 // Playback follows the tracker's existing end-of-song and loop behavior.
 // Decoder is not safe for concurrent use.
 type Decoder struct {
-	tracker  *Tracker
-	warnings []string
-	samples  []float32
-	pcm      []byte
-	pending  []byte
+	tracker      *Tracker
+	warnings     []string
+	samples      []float32
+	pcm          []byte
+	pending      []byte
+	initialSpeed int
+	initialTempo float64
 }
 
 // DecoderOptions configures sequence selection and playback termination.
@@ -103,8 +105,9 @@ func Decode(in io.Reader, options ...DecoderOptions) (*Decoder, error) {
 
 	return &Decoder{
 		tracker: tracker, warnings: loaded.Warnings,
-		samples: make([]float32, decoderBlockFrames*2),
-		pcm:     make([]byte, decoderBlockFrames*2*4),
+		samples:      make([]float32, decoderBlockFrames*2),
+		pcm:          make([]byte, decoderBlockFrames*2*4),
+		initialSpeed: loaded.InitialSpeed, initialTempo: loaded.InitialTempo,
 	}, nil
 }
 

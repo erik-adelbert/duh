@@ -17,10 +17,13 @@ import (
 )
 
 type webtui struct {
-	tap      *pcm.Tap
-	spectrum tui.Spectro
-	left     tui.VuBar
-	right    tui.VuBar
+	tap         *pcm.Tap
+	spectrum    tui.Spectro
+	left        tui.VuBar
+	right       tui.VuBar
+	duration    time.Duration
+	hasDuration bool
+	firstPass   bool
 }
 
 func newWebTUI(decoder *mod.Decoder) (io.Reader, *webtui, error) {
@@ -61,6 +64,12 @@ func (ui *webtui) Render(seconds float64) string {
 	ui.right.Frender(&out, 40)
 	out.WriteString("\n  -36dB\n\n")
 	fmt.Fprintf(&out, "%s%s", pad, tui.TimerString(time.Duration(seconds*float64(time.Second))))
+	if ui.hasDuration {
+		fmt.Fprintf(&out, " / %s", tui.TimerString(ui.duration))
+		if ui.firstPass {
+			out.WriteString(" (first pass)")
+		}
+	}
 	out.WriteString(tui.Green(" x1\n"))
 	return out.String()
 }

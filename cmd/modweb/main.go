@@ -16,12 +16,16 @@ import (
 	"github.com/erik-adelbert/duh/pkg/mod"
 )
 
-const maxSourceSize = 10 * 1024 * 1024
+const (
+	maxSourceSize         = 10 * 1024 * 1024
+	durationTicksPerBatch = 64
+)
 
 func main() {
 	var decoder *mod.Decoder
 	var visualization *webtui
 	var source io.Reader
+	var duration *mod.DurationEstimator
 
 	buf := make([]byte, 32768)
 
@@ -57,6 +61,14 @@ func main() {
 			decoder = nil
 			return map[string]any{"error": err.Error()}
 		}
+		duration, err = decoder.NewDurationEstimator()
+		if err != nil {
+			visualization.Stop()
+			_ = decoder.Close()
+			decoder, visualization, source = nil, nil, nil
+			return map[string]any{"error": err.Error()}
+		}
+		visualization.firstPass = !args[1].Bool()
 
 		warnings := js.Global().Get("Array").New()
 		for _, warning := range decoder.Warnings() {
@@ -64,6 +76,23 @@ func main() {
 		}
 
 		return map[string]any{"warnings": warnings}
+	}))
+
+	js.Global().Set("stepModuleDuration", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+		if duration == nil || visualization == nil {
+			return map[string]any{"error": "No duration calculation is active."}
+		}
+		value, done, err := duration.Advance(durationTicksPerBatch)
+		if err != nil {
+			duration = nil
+			return map[string]any{"error": err.Error()}
+		}
+		if done {
+			visualization.duration = value
+			visualization.hasDuration = true
+			duration = nil
+		}
+		return map[string]any{"done": done}
 	}))
 
 	js.Global().Set("readModule", js.FuncOf(func(_ js.Value, args []js.Value) any {
@@ -97,7 +126,7 @@ func main() {
 		visualization.Stop()
 		err := decoder.Close()
 		decoder = nil
-		source, visualization = nil, nil
+		source, visualization, duration = nil, nil, nil
 
 		if err != nil {
 			return err.Error()

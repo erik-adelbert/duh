@@ -125,6 +125,11 @@ Without a path, `moddec` reads stdin. Output is raw 32-bit little-endian float
 stereo PCM at 48 kHz. Use `-noloop` to stop when playback repeats, and `-seq N`
 to select an MPTM sequence.
 
+`modweb` estimates the selected sequence's duration without rendering audio.
+With NoLoop disabled, the displayed time is the first pass before playback
+repeats. Complex modules can exceed the calculation limit; playback continues
+without a duration in that case.
+
 Support is incomplete and playback can differ from other players. See the
 [tracker compatibility inventory](documentation/tracker/tracker-compatibility.md)
 for limitations and the [tracker development guide](documentation/tracker/tracker-development.md)
