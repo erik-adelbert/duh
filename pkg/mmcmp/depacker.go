@@ -369,7 +369,7 @@ func (r *Unpacker) unpack() error {
 			return mkError(errBlock, "compressed data offset out of bounds")
 		}
 
-		pkdata := make([]byte, block.CompSize) // compressed data buffer
+		pkdata := make([]byte, block.CompSize-uint32(block.TTEntries)) // compressed data buffer
 
 		var nread int
 		nread, err = r.ra.ReadAt(pkdata, pkoff) // read compressed data
@@ -377,7 +377,7 @@ func (r *Unpacker) unpack() error {
 		switch {
 		case err != nil && err != io.EOF:
 			return mkError(errBlock, err)
-		case uint32(nread) != block.CompSize:
+		case nread != len(pkdata):
 			return mkError(errBlock, "short read")
 		}
 
@@ -403,8 +403,7 @@ func (r *Unpacker) unpack() error {
 			}
 
 			_, err = r.ra.ReadAt(trans[:hi:hi], off) // read translation table
-
-			if err != nil && err != io.EOF {
+			if err != nil {
 				return mkError(errBlock, err)
 			}
 
@@ -448,7 +447,7 @@ func (r *Unpacker) readHeader(off int64) (b block, err error) {
 		BitLen:      ble.Uint16(hdr[18:20]),
 	}
 
-	if b.CompSize*b.FullSize == 0 || b.SubBlockCnt == 0 {
+	if b.CompSize == 0 || b.FullSize == 0 || b.SubBlockCnt == 0 {
 		return zero, mkError(errBlock, "invalid block sizes")
 	}
 
@@ -474,7 +473,7 @@ func (r *Unpacker) readHeader(off int64) (b block, err error) {
 			maxBitLen = 16
 		}
 
-		if b.BitLen > maxBitLen {
+		if b.BitLen >= maxBitLen {
 			return zero, mkError(errBlock, "invalid bit length")
 		}
 	}
@@ -488,7 +487,7 @@ func (r *Unpacker) readSection(buf any, sec section) error {
 
 	err := binary.Read(sr, ble, buf)
 
-	if err != nil && err != io.EOF {
+	if err != nil {
 		return err
 	}
 

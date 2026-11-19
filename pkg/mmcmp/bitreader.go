@@ -39,8 +39,9 @@ func (br *bitReader) readN(n int) (int, error) {
 		br.idx++
 	}
 
-	// If there are not enough bits left, inject 0s
-	br.bitCnt += ((n - br.bitCnt + 7) / 8) * 8 // align to next byte boundary
+	if br.bitCnt < n {
+		return 0, mkError(errBits, "unexpected end of bitstream")
+	}
 
 	// Extract the requested bits from the bit buffer
 	mask := (uint64(1) << n) - 1
