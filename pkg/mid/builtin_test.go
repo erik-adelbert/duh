@@ -25,9 +25,30 @@
 package mid
 
 import (
+	"bytes"
+	"encoding/gob"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestBuiltinTablesMatchDatabase(t *testing.T) {
+	if ErrBuiltin != nil {
+		t.Fatal(ErrBuiltin)
+	}
+	db := NewBankDB()
+	if err := gob.NewDecoder(bytes.NewReader(adlmidi)).Decode(db); err != nil {
+		t.Fatal(err)
+	}
+	want, err := db.AsTables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := &adlTables{Instruments: adlIns, Metas: adlMetas, Banks: banks}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatal("built-in playback tables differ from decoded database")
+	}
+}
 
 func TestDefaultMelodicFourOpCount(t *testing.T) {
 	metas := []adlMeta{

@@ -38,15 +38,13 @@ import (
 var adlmidi []byte
 
 var (
-	builtin *BankDB
-
 	adlIns   []adlData
 	adlMetas []adlMeta
 	banks    []adlBank
 )
 
 func init() {
-	builtin = NewBankDB()
+	builtin := NewBankDB()
 
 	err := gob.NewDecoder(bytes.NewReader(adlmidi)).Decode(builtin)
 
