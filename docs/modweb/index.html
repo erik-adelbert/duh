@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <title>duh modweb</title>
+  <link rel="icon" type="image/svg+xml" href="../midweb/favicon.svg">
+  <style>
+    html, body { margin: 0; padding: 0; background: #000; font-family: monospace; color: #ddd; }
+    #controls { margin: 30px; }
+    #buttons { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    #file { display: none; }
+    #buttons > * { box-sizing: border-box; font: inherit; height: 28px; line-height: 26px; }
+    #sequence-control, #loop-control { display: inline-flex; align-items: center; gap: 8px; }
+    #sequence { width: 5em; padding: 0 6px; border: 1px solid #555; border-radius: 3px; background: #111; color: #ddd; font: inherit; }
+    button { padding: 0 12px; border: 1px solid #555; border-radius: 3px; background: #222; color: #ddd; cursor: pointer; }
+    button:disabled, input:disabled { opacity: .45; cursor: default; }
+    #info { margin-top: 6px; color: #ccc; white-space: pre-line; }
+    #warnings { color: #eeb; white-space: pre-line; }
+    #terminal-frame { display: block; margin: 10px; width: 84ch; height: calc(50 * 13px * 1.1); border: 0; }
+  </style>
+  <script src="wasm_exec.js"></script>
+</head>
+<body>
+  <div id="controls">
+    <div id="buttons">
+      <input id="file" type="file" accept=".s3m,.it,.mptm,.mmcmp" hidden>
+      <button id="choose" type="button">Choose module</button>
+      <label id="loop-control"><input id="noloop" type="checkbox" checked> NoLoop</label>
+      <label id="sequence-control" for="sequence">Sequence <input id="sequence" type="number" min="0" max="2147483647" value="0"></label>
+      <button id="play" type="button" disabled>Play</button>
+      <button id="stop" type="button" disabled>Stop</button>
+      <button id="resume" type="button" disabled>Resume audio</button>
+    </div>
+    <div id="info">
+      <span id="status" role="status">Loading player...</span><br>
+      <span id="file-name">No file selected</span><span> / PCM 48.000 kHz stereo</span>
+      <div id="warnings" role="status"></div>
+    </div>
+  </div>
+  <iframe id="terminal-frame" src="mod.html" title="Tracker player"></iframe>
+  <script src="player.js"></script>
+</body>
+</html>

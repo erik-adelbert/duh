@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css">
+  <style>
+    html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+    #terminal { width: 84ch; height: 56em; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.19.0/lib/addon-webgl.js"></script>
+</head>
+<body>
+  <div id="terminal"></div>
+  <script>
+    const term = new Terminal({
+      cols: 84, rows: 50, cursorBlink: false, convertEol: true, scrollback: 0,
+      fontFamily: '"JetBrains Mono", "DejaVu Sans Mono", monospace', fontSize: 13, lineHeight: 1.1
+    });
+    term.open(document.getElementById("terminal"));
+    try { term.loadAddon(new WebglAddon.WebglAddon()); } catch { /* use the default renderer */ }
+    window.addEventListener("message", event => {
+      if (event.source === parent && event.data?.type === "screen") term.write(event.data.screen);
+    });
+  </script>
+</body>
+</html>

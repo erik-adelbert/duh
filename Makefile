@@ -10,7 +10,7 @@ else
 endif
 
 # Auto-discover all command directories under ./cmd
-BINARIES := $(filter-out midweb vgmweb,$(notdir $(patsubst %/,%,$(filter %/,$(wildcard cmd/*/)))))
+BINARIES := $(filter-out midweb modweb vgmweb,$(notdir $(patsubst %/,%,$(filter %/,$(wildcard cmd/*/)))))
 
 # If BINARY is set, only build that one; otherwise build all
 ifdef BINARY
@@ -19,7 +19,7 @@ else
 	TARGETS := $(BINARIES)
 endif
 
-.PHONY: all build test test-race lint fmt fmt-check vet check clean install tools midicat list pkg-docs man serve-blog utm
+.PHONY: all build test test-race lint fmt fmt-check vet check clean install tools midicat list pkg-docs man serve-blog utm midweb modweb vgmweb
 
 all: check
 
@@ -50,6 +50,14 @@ midweb:
 	cp pkg/mid/LICENCE docs/midweb/LGPL-2.1
 	cp LICENCE docs/midweb/LICENCE
 	cp "$$(go env GOROOT)/LICENSE" docs/midweb/GO-LICENSE
+
+modweb:
+	GOOS=js GOARCH=wasm go build -o docs/modweb/modweb.wasm ./cmd/modweb
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" docs/modweb/wasm_exec.js
+	cp LICENCE docs/modweb/LICENCE
+	cp pkg/mod/openmpt-LICENSE docs/modweb/openmpt-LICENSE
+	cp pkg/opl3/LICENCE docs/modweb/LGPL-2.1
+	cp "$$(go env GOROOT)/LICENSE" docs/modweb/GO-LICENSE
 
 # Show what would be built
 list:

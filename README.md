@@ -18,6 +18,7 @@ Note. The demo uses `oto` for audio output.
 ## Try a demo in your browser
 
 - [MIDI demo](https://erik-adelbert.github.io/duh/midweb/)
+- [Tracker demo](https://erik-adelbert.github.io/duh/modweb/)
 - [VGM demo](https://erik-adelbert.github.io/duh/vgmweb/)
 
 ## Status
@@ -67,7 +68,7 @@ Use `make BINARY=pcmconv build` to build one command, or
 `go install ./cmd/pcmconv` to install it into Go's binary installation directory.
 Each command accepts `-h`; the [man pages](man/) contain the same usage information.
 Run `go test ./...` to test the project. The browser builds are separate:
-`make midweb` and `make vgmweb`.
+`make midweb`, `make modweb`, and `make vgmweb`.
 
 ## Toolkit
 

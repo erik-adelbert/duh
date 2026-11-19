@@ -1,0 +1,15 @@
+modweb is part of duh. The original code is licensed under the BSD
+3-Clause license in LICENCE.
+
+The tracker uses OpenMPT as a playback reference and includes material
+from OpenMPT. Its copyright and license are in openmpt-LICENSE.
+
+The tracker depends on pcm and opl3, which include code licensed under
+the GNU LGPL version 2.1 or later. See LGPL-2.1. The OPL3 code is based
+on Nuked OPL3 by Nuke.YKT and Nuked-OPL3-fast by Tony Gies. The PCM code
+is based on the UCB release of Plan 9 pcmconv.
+
+Go's runtime and wasm_exec.js are covered by GO-LICENSE.
+
+Source code and component notices:
+https://github.com/erik-adelbert/duh
