@@ -29,10 +29,6 @@ func mptImprecisePingPongTurn(pos float64, loopStart, loopEnd, diff int) float64
 	return pos
 }
 
-func applyMPTResampling(instruments []ITInstrument, modes []uint32) error {
-	return applyMPTSongResampling(instruments, modes, nil)
-}
-
 func applyMPTSongResampling(instruments []ITInstrument, modes []uint32, songMode *uint32) error {
 	if songMode != nil && *songMode != 0 && *songMode != 1 && *songMode != 2 && *songMode != 3 && *songMode != 5 {
 		return fmt.Errorf("unsupported MPTM song resampling mode %d", *songMode)

@@ -553,14 +553,6 @@ func isMPTM(data []byte) bool {
 	return offset >= 0x100 && offset+3 <= uint64(len(data)-4) && string(data[offset:offset+3]) == "228"
 }
 
-func unpackITPattern(data []byte, count int) (PatternAsset, error) {
-	return unpackITPatternMode(data, count, false)
-}
-
-func unpackITPatternMode(data []byte, count int, mptm bool) (PatternAsset, error) {
-	return unpackITPatternChannels(data, count, mptm, itHeaderChannels)
-}
-
 func unpackITPatternChannels(data []byte, count int, mptm bool, channels int) (PatternAsset, error) {
 	if channels < 1 || channels > MaxTracks {
 		return PatternAsset{}, fmt.Errorf("invalid IT pattern channel count %d", channels)

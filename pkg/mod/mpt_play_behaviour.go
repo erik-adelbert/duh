@@ -76,11 +76,6 @@ func (flags mptSavedPlayBehaviours) enabled(behaviour mptPlayBehaviour) bool {
 	return behaviour < mptKnownPlayBehaviourCount && flags&(1<<behaviour) != 0
 }
 
-func parseMPTSavedPlayBehaviours(data []byte) (mptSavedPlayBehaviours, error) {
-	flags, _, err := parseMPTPlayFlags(data, false)
-	return flags, err
-}
-
 type mptAdditionalPlayBehaviours struct {
 	itMultiSampleInstrument    bool
 	rowDelayWithNoteDelay      bool
