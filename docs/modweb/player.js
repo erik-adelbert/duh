@@ -7,21 +7,35 @@ const terminal = document.getElementById("terminal-frame");
 const noLoop = document.getElementById("noloop");
 const sequence = document.getElementById("sequence");
 const play = document.getElementById("play");
-const resume = document.getElementById("resume");
+const pause = document.getElementById("pause");
 const stop = document.getElementById("stop");
 const status = document.getElementById("status");
 const warnings = document.getElementById("warnings");
+const wakeLockStatus = document.getElementById("wake-lock-status");
 const sampleRate = 48000;
 const maxFileSize = 10 * 1024 * 1024;
 const chunkBytes = 8192;
 const maxQueued = 4;
 let ready = false;
 let session = null;
+const playbackWakeLock = new PlaybackWakeLock(
+  navigator.wakeLock,
+  () => document.visibilityState === "visible",
+  message => { wakeLockStatus.textContent = message; }
+);
+document.addEventListener("visibilitychange", () => playbackWakeLock.visibilityChanged());
+window.addEventListener("pagehide", () => playbackWakeLock.stop());
+window.addEventListener("pageshow", event => {
+  if (event.persisted && session?.node && !session.paused && session.context.state === "running") {
+    playbackWakeLock.start();
+  }
+});
 
 function updateControls() {
   play.disabled = !ready || !fileInput.files.length || session !== null;
   stop.disabled = session === null;
-  resume.disabled = session === null || !session.context || session.context.state === "running";
+  pause.disabled = !session?.node || session.controlPending;
+  pause.textContent = session && (session.paused || session.context?.state !== "running") ? "Resume" : "Pause";
   fileInput.disabled = session !== null;
   choose.disabled = session !== null;
   noLoop.disabled = session !== null;
@@ -31,6 +45,8 @@ function updateControls() {
 async function endSession(current, message) {
   if (session !== current) return;
   session = null;
+  playbackWakeLock.stop();
+  updateControls();
   clearInterval(current.display);
   clearTimeout(current.durationTimer);
   if (current.node) current.node.disconnect();
@@ -42,22 +58,36 @@ async function endSession(current, message) {
       message += ` Audio close failed: ${closeError.message}`;
     }
   }
-  status.textContent = error ? `${message} ${error}` : message;
-  updateControls();
+  if (session === null) {
+    status.textContent = error ? `${message} ${error}` : message;
+    updateControls();
+  }
 }
 
 function calculateDuration(current) {
   if (session !== current) return;
+  current.durationTimer = null;
+  if (current.paused || current.context.state !== "running") return;
   const result = globalThis.stepModuleDuration();
   if (result.error) {
+    current.durationDone = true;
     warnings.textContent = [warnings.textContent, `Duration unavailable: ${result.error}`].filter(Boolean).join("\n");
   } else if (!result.done) {
+    current.durationTimer = setTimeout(() => calculateDuration(current), 0);
+  } else {
+    current.durationDone = true;
+  }
+}
+
+function scheduleDuration(current) {
+  if (session === current && !current.paused && current.context.state === "running" &&
+      !current.durationTimer && !current.durationDone) {
     current.durationTimer = setTimeout(() => calculateDuration(current), 0);
   }
 }
 
 function pump(current) {
-  if (session !== current || current.finishing || current.context.state !== "running") return;
+  if (session !== current || current.paused || current.finishing || current.context.state !== "running") return;
   try {
     while (current.queued < maxQueued) {
       const buffer = new Uint8Array(chunkBytes);
@@ -94,14 +124,42 @@ fileInput.addEventListener("change", () => {
 stop.addEventListener("click", () => {
   if (session) void endSession(session, "Stopped.");
 });
-resume.addEventListener("click", async () => {
+pause.addEventListener("click", async () => {
   const current = session;
-  if (!current || !current.context) return;
+  if (!current?.node || current.controlPending) return;
+  const resuming = current.paused || current.context.state !== "running";
+  current.controlPending = true;
+  if (!resuming) current.paused = true;
+  updateControls();
   try {
-    await current.context.resume();
-    if (current.context.state !== "running") throw new Error("Audio is still suspended.");
+    if (resuming) {
+      await current.context.resume();
+      if (session !== current) return;
+      if (current.context.state !== "running") throw new Error("Audio is still suspended.");
+      current.paused = false;
+      playbackWakeLock.start();
+      status.textContent = "Playing.";
+      pump(current);
+      scheduleDuration(current);
+    } else {
+      await current.context.suspend();
+      if (session !== current) return;
+      if (current.context.state === "running") throw new Error("Audio is still running.");
+      playbackWakeLock.stop();
+      status.textContent = "Paused.";
+    }
   } catch (error) {
-    if (session === current) status.textContent = `Audio resume failed: ${error.message}`;
+    if (session === current) {
+      if (!resuming) {
+        current.paused = false;
+        pump(current);
+        scheduleDuration(current);
+      }
+      status.textContent = `Could not ${resuming ? "resume" : "pause"}: ${error.message || String(error)}`;
+    }
+  } finally {
+    current.controlPending = false;
+    if (session === current) updateControls();
   }
 });
 
@@ -116,7 +174,10 @@ play.addEventListener("click", async () => {
     status.textContent = "Choose a non-negative MPTM sequence number.";
     return;
   }
-  const current = { context: null, node: null, opened: false, queued: 0, frames: 0, finishing: false };
+  const current = {
+    context: null, node: null, opened: false, queued: 0, frames: 0,
+    finishing: false, paused: false, controlPending: false, durationDone: false
+  };
   session = current;
   warnings.textContent = "";
   status.textContent = "Loading module...";
@@ -160,18 +221,28 @@ play.addEventListener("click", async () => {
     current.node.onprocessorerror = () => void endSession(current, "Audio processor failed.");
     current.context.onstatechange = () => {
       if (session !== current) return;
+      if (current.controlPending) return;
+      if (current.paused) {
+        updateControls();
+        return;
+      }
       if (current.context.state === "running") {
         status.textContent = "Playing.";
+        playbackWakeLock.start();
         pump(current);
+        scheduleDuration(current);
       } else if (current.context.state === "suspended" || current.context.state === "interrupted") {
-        status.textContent = "Audio suspended. Use Resume audio to continue.";
+        playbackWakeLock.stop();
+        status.textContent = "Audio suspended. Use Resume to continue.";
       }
       updateControls();
     };
     current.node.connect(current.context.destination);
     status.textContent = "Playing.";
+    playbackWakeLock.start();
+    updateControls();
     pump(current);
-    current.durationTimer = setTimeout(() => calculateDuration(current), 0);
+    scheduleDuration(current);
   } catch (error) {
     await endSession(current, `Playback failed: ${error.message}`);
   }

@@ -21,6 +21,7 @@
     #terminal-frame { display: block; margin: 10px; width: 84ch; height: calc(50 * 13px * 1.1); border: 0; }
   </style>
   <script src="wasm_exec.js"></script>
+  <script src="../midweb/screen-wake-lock.js?v=1"></script>
 </head>
 <body>
   <div id="controls">
@@ -31,15 +32,16 @@
       <label id="sequence-control" for="sequence">Sequence <input id="sequence" type="number" min="0" max="2147483647" value="0"></label>
       <button id="play" type="button" disabled>Play</button>
       <button id="stop" type="button" disabled>Stop</button>
-      <button id="resume" type="button" disabled>Resume audio</button>
+      <button id="pause" type="button" disabled>Pause</button>
     </div>
     <div id="info">
       <span id="status" role="status">Loading player...</span><br>
       <span id="file-name">No file selected</span><span> / PCM 48.000 kHz stereo</span>
+      <div id="wake-lock-status" role="status"></div>
       <div id="warnings" role="status"></div>
     </div>
   </div>
   <iframe id="terminal-frame" src="mod.html" title="Tracker player"></iframe>
-  <script src="player.js"></script>
+  <script src="player.js?v=pause-1"></script>
 </body>
 </html>
