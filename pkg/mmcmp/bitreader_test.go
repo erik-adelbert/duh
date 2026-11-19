@@ -136,20 +136,7 @@ func TestBitReaderReadBeyondData(t *testing.T) {
 		t.Fatalf("Read(8) error = %v", err)
 	}
 
-	n, err := br.readN(1)
-	if err != nil {
-		t.Errorf("Read(1) error = %v", err)
-	}
-
-	if n != 0 {
-		t.Errorf("Read(1) beyond data = %#x, want 0", n)
-	}
-
-	n, err = br.readN(63)
-	if err != nil {
-		t.Errorf("Read(63) error = %v", err)
-	}
-	if n != 0 {
-		t.Errorf("Read(63) beyond data = %#x, want 0", n)
+	if _, err := br.readN(1); err == nil {
+		t.Error("Read(1) beyond data succeeded")
 	}
 }
