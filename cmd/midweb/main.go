@@ -264,16 +264,33 @@ func altScreen(out Printer, on bool) {
 	out(tui.AltScreen(false))
 }
 
-type JSOut struct{ write js.Value }
+type JSOut struct {
+	acquire js.Value
+	write   js.Value
+}
 
-func NewJSOut() *JSOut { return &JSOut{write: js.Global().Get("writeAudio")} }
+func NewJSOut() *JSOut {
+	acquire := js.Global().Get("acquireAudioBuffer")
+	if acquire.Type() != js.TypeFunction {
+		js.Global().Get("console").Call("warn", "Audio buffer pool unavailable; using fresh buffers. Reload midweb to update the player.")
+	}
+	return &JSOut{
+		acquire: acquire,
+		write:   js.Global().Get("writeAudio"),
+	}
+}
 
 func (o *JSOut) Elapsed() time.Duration {
 	return time.Duration(js.Global().Call("playbackTime").Float() * float64(time.Second))
 }
 
 func (o *JSOut) Write(p []byte) (int, error) {
-	buf := js.Global().Get("Uint8Array").New(len(p))
+	var buf js.Value
+	if o.acquire.Type() == js.TypeFunction {
+		buf = o.acquire.Invoke(len(p))
+	} else {
+		buf = js.Global().Get("Uint8Array").New(len(p))
+	}
 	js.CopyBytesToJS(buf, p)
 
 	o.write.Invoke(buf)

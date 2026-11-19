@@ -22,6 +22,7 @@
   </style>
 
   <script src="wasm_exec.js"></script>
+  <script src="pcm-buffer-pool.js?v=audio-pool-2"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.19.0/lib/addon-webgl.js"></script>
 </head>
@@ -37,6 +38,8 @@
     let audioReady = null;
     let bankNames = null;
     let playbackStartTime = 0;
+    // Keep the buffer size in sync with audioChunkBytes in cmd/midweb/play.go.
+    const audioBuffers = new PCMBufferPool(4 * 1024, 8);
 
     const post = message => parent.postMessage(message, "*");
 
@@ -85,7 +88,7 @@
 
         audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
 
-        await audioContext.audioWorklet.addModule("pcm-worklet.js");
+        await audioContext.audioWorklet.addModule("pcm-worklet.js?v=audio-pool-2");
 
         audioNode = new AudioWorkletNode(audioContext, "mid-pcm-player", {
           numberOfInputs: 0,
@@ -93,6 +96,7 @@
           outputChannelCount: [2]
         });
 
+        audioNode.port.onmessage = event => audioBuffers.recycle(event.data);
         audioNode.connect(audioContext.destination);
 
         const ok = await unlockAudio();
@@ -129,6 +133,8 @@
       bankNames = names;
       post({ type: "banks", names });
     };
+
+    globalThis.acquireAudioBuffer = length => audioBuffers.acquire(length);
 
     globalThis.writeAudio = bytes => {
       if (!audioNode) return;
@@ -238,7 +244,7 @@
     const go = new Go();
 
     WebAssembly.instantiateStreaming(
-      fetch("midweb.wasm"),
+      fetch("midweb.wasm?v=audio-pool-2"),
       go.importObject
     )
       .then(({ instance }) => go.run(instance))

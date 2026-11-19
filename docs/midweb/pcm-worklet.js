@@ -31,7 +31,6 @@ class MIDPCMPlayer extends AudioWorkletProcessor {
     console.log("PCM player worklet constructed");
   }
 
-
   process(inputs, outputs) {
     const output = outputs[0];
 
@@ -108,6 +107,7 @@ class MIDPCMPlayer extends AudioWorkletProcessor {
       if (this.offset >= pcm.length) {
         this.queue.shift();
         this.offset = 0;
+        this.port.postMessage(pcm.buffer, [pcm.buffer]);
       }
     }
 

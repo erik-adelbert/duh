@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	// Keep in sync with the pool buffer size in docs/midweb/mid.html.
 	audioChunkBytes     = 4 * 1024
 	audioBytesPerSecond = 48000 * 4
 	audioLead           = time.Duration(12 * 1024 * int64(time.Second) / audioBytesPerSecond)
