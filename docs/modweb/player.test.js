@@ -11,6 +11,7 @@ function playerContext(steps) {
   const timers = [];
   const listeners = new Map();
   const wakeEvents = [];
+  const terminalMessages = [];
   const context = {
     document: {
       visibilityState: "visible",
@@ -18,7 +19,8 @@ function playerContext(steps) {
       getElementById(id) {
         if (!elements.has(id)) elements.set(id, {
           addEventListener(type, callback) { listeners.set(`${id}:${type}`, callback); },
-          textContent: "", files: []
+          textContent: "", files: [],
+          contentWindow: { postMessage(message) { terminalMessages.push(message); } }
         });
         return elements.get(id);
       }
@@ -40,8 +42,24 @@ function playerContext(steps) {
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(path.join(__dirname, "player.js"), "utf8"), context);
   vm.runInContext('session = { context: { state: "running" }, paused: false }', context);
-  return { context, elements, timers, listeners, wakeEvents };
+  return { context, elements, timers, listeners, wakeEvents, terminalMessages };
 }
+
+test("ending a session clears the terminal without clearing a later session", async () => {
+  const { context, terminalMessages, elements } = playerContext([]);
+  context.clearInterval = () => {};
+  vm.runInContext("session.context.close = async () => {}", context);
+  const current = vm.runInContext("session", context);
+  await vm.runInContext('endSession(session, "Playback finished.")', context);
+  assert.equal(terminalMessages.length, 1);
+  assert.equal(terminalMessages[0].type, "clear-screen");
+  assert.equal(elements.get("status").textContent, "Playback finished.");
+
+  context.oldSession = current;
+  vm.runInContext('session = { context: { state: "running" }, paused: false }', context);
+  await vm.runInContext('endSession(oldSession, "Stopped.")', context);
+  assert.equal(terminalMessages.length, 1);
+});
 
 test("duration is calculated in cancellable batches", () => {
   const { context, timers } = playerContext([{ done: false }, { done: true }]);

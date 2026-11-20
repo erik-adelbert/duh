@@ -25,6 +25,7 @@
   <script src="pcm-buffer-pool.js?v=audio-pool-2"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.19.0/lib/addon-webgl.js"></script>
+  <script src="playback-terminal.js?v=1"></script>
 </head>
 
 <body>
@@ -39,16 +40,14 @@
     let bankNames = null;
     let playbackStartTime = 0;
     let paused = false;
+    let stopped = false;
+    let active = false;
+    let audioBlocked = false;
     let gestureUnlock = null;
     // Keep the buffer size in sync with audioChunkBytes in cmd/midweb/play.go.
     const audioBuffers = new PCMBufferPool(4 * 1024, 8);
 
     const post = message => parent.postMessage(message, "*");
-
-    function reportError(message) {
-      console.error(message);
-      post({ type: "error", message: String(message) });
-    }
 
     /**
      * Resume the AudioContext. Called (a) right after creation and (b) from a
@@ -73,8 +72,7 @@
         if (paused) return;
         const ok = await unlockAudio();
         if (ok && !paused) {
-          removeGestureUnlock();
-          post({ type: "audio-unlocked" });
+          setAudioUnlocked();
         }
       };
       document.addEventListener("pointerdown", gestureUnlock, true);
@@ -88,29 +86,50 @@
       gestureUnlock = null;
     }
 
-    async function initAudio() {
-      if (audioReady) return audioReady;
+    function setAudioBlocked() {
+      if (!audioBlocked) {
+        audioBlocked = true;
+        post({ type: "audio-blocked" });
+      }
+      installGestureUnlock();
+    }
 
-      audioReady = (async () => {
+    function setAudioUnlocked() {
+      removeGestureUnlock();
+      if (audioBlocked) {
+        audioBlocked = false;
+        post({ type: "audio-unlocked" });
+      }
+    }
+
+    async function initAudio() {
+      if (!audioReady) audioReady = (async () => {
         // iOS mutes Web Audio while the ringer switch is silent unless the session is "playback".
         if (navigator.audioSession) navigator.audioSession.type = "playback";
 
         audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
+        audioContext.addEventListener("statechange", () => {
+          if (!active) return;
+          if ((audioContext.state === "suspended" || audioContext.state === "interrupted") && !paused) {
+            setAudioBlocked();
+          } else if (audioContext.state === "running") {
+            setAudioUnlocked();
+          }
+        });
 
         await audioContext.audioWorklet.addModule("pcm-worklet.js?v=audio-pool-2");
 
+      })();
+      await audioReady;
+      if (!audioNode) {
         audioNode = new AudioWorkletNode(audioContext, "mid-pcm-player", {
           numberOfInputs: 0,
           numberOfOutputs: 1,
           outputChannelCount: [2]
         });
-
         audioNode.port.onmessage = event => audioBuffers.recycle(event.data);
         audioNode.connect(audioContext.destination);
-
-      })();
-
-      return audioReady;
+      }
     }
 
     globalThis.testAudio = async () => {
@@ -148,7 +167,20 @@
       return Math.max(0, audioContext.currentTime - playbackStartTime);
     };
 
-    globalThis.playbackPaused = () => paused;
+    globalThis.playbackPaused = () => paused || (!!audioContext && audioContext.state !== "running");
+    globalThis.playbackStopped = () => stopped;
+
+    globalThis.stopPlayback = () => {
+      stopped = true;
+      active = false;
+      paused = false;
+      audioBlocked = false;
+      removeGestureUnlock();
+      if (audioNode) {
+        audioNode.disconnect();
+        audioNode = null;
+      }
+    };
 
     globalThis.pausePlayback = async () => {
       paused = true;
@@ -168,7 +200,7 @@
         throw new Error("Audio could not be resumed. Try again.");
       }
       paused = false;
-      removeGestureUnlock();
+      setAudioUnlocked();
     };
 
     const term = new Terminal({
@@ -184,17 +216,17 @@
 
     term.open(document.getElementById("terminal"));
 
-    try {
-      term.loadAddon(new WebglAddon.WebglAddon());
-    } catch {
-      // fall back to canvas/DOM renderer
-    }
+    const playbackTerminal = new PlaybackTerminal(term);
+    let playbackFailed = false;
+    playbackTerminal.start();
 
     globalThis.renderScreen = screen => term.write(screen);
 
     globalThis.renderError = error => {
+      playbackFailed = true;
       console.error(error);
       term.write(`\r\n\x1b[31m${error}\x1b[0m\r\n`);
+      post({ type: "error", message: String(error) });
     };
 
     globalThis.playbackStarted = () => {
@@ -204,11 +236,15 @@
 
     globalThis.playbackEnded = () => {
       paused = false;
+      active = false;
+      audioBlocked = false;
       removeGestureUnlock();
+      playbackTerminal.finish(!playbackFailed);
       post({ type: "playback-ended" });
     };
 
     window.addEventListener("message", async event => {
+      if (event.source !== parent) return;
       const data = event.data;
       if (!data || typeof data !== "object") return;
 
@@ -224,6 +260,10 @@
 
       if (data.type !== "play") return;
 
+      playbackFailed = false;
+      stopped = false;
+      active = true;
+      playbackTerminal.start();
       try {
         const { src: pendingFile, bank } = data;
 
@@ -231,8 +271,7 @@
 
         await initAudio();
         if (audioContext.state !== "running" && !(await unlockAudio())) {
-          installGestureUnlock();
-          post({ type: "audio-blocked" });
+          setAudioBlocked();
         }
 
         console.log({
@@ -240,10 +279,6 @@
           sampleRate: audioContext.sampleRate,
           baseLatency: audioContext.baseLatency,
           outputLatency: audioContext.outputLatency,
-        });
-
-        audioContext.addEventListener("statechange", () => {
-          console.log("AudioContext state:", audioContext.state);
         });
 
         term.clear();
@@ -260,7 +295,6 @@
         const result = globalThis.run(bytes, bank);
         if (result) renderError(result);
       } catch (error) {
-        reportError(error?.message ?? error);
         renderError(error?.stack ?? String(error));
         // Make sure the parent UI unsticks.
         globalThis.playbackEnded();
@@ -275,13 +309,12 @@
     const go = new Go();
 
     WebAssembly.instantiateStreaming(
-      fetch("midweb.wasm?v=pause-1"),
+      fetch("midweb.wasm?v=stop-1"),
       go.importObject
     )
       .then(({ instance }) => go.run(instance))
       .catch(error => {
         renderError(`Failed to load WASM:\r\n${error}`);
-        reportError(`Failed to load WASM: ${error}`);
       });
   </script>
 </body>

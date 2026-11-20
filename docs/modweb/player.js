@@ -49,6 +49,7 @@ async function endSession(current, message) {
   updateControls();
   clearInterval(current.display);
   clearTimeout(current.durationTimer);
+  terminal.contentWindow.postMessage({ type: "clear-screen" }, "*");
   if (current.node) current.node.disconnect();
   const error = current.opened ? globalThis.closeModule() : null;
   if (current.context) {

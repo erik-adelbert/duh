@@ -96,6 +96,8 @@ func main() {
 		return nil
 	}))
 
+	js.Global().Call("playerReady")
+
 	select {}
 }
 
@@ -293,6 +295,10 @@ func (o *JSOut) Elapsed() time.Duration {
 
 func (o *JSOut) Paused() bool {
 	return js.Global().Call("playbackPaused").Bool()
+}
+
+func (o *JSOut) Stopped() bool {
+	return js.Global().Call("playbackStopped").Bool()
 }
 
 func (o *JSOut) Write(p []byte) (int, error) {

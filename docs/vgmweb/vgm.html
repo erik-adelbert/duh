@@ -23,6 +23,7 @@
   <script src="wasm_exec.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.19.0/lib/addon-webgl.js"></script>
+  <script src="playback-terminal.js?v=1"></script>
 </head>
 
 <body>
@@ -37,6 +38,9 @@
     let audioBlocked = false;
     let gestureUnlock = null;
     let paused = false;
+    let stopped = false;
+    let active = false;
+    let wasmReady = false;
 
     const post = message => parent.postMessage(message, "*");
 
@@ -59,12 +63,16 @@
       installGestureUnlock();
     }
 
-    function setAudioUnlocked() {
+    function removeGestureUnlock() {
       if (gestureUnlock) {
         document.removeEventListener("pointerdown", gestureUnlock, true);
         document.removeEventListener("keydown", gestureUnlock, true);
         gestureUnlock = null;
       }
+    }
+
+    function setAudioUnlocked() {
+      removeGestureUnlock();
       if (audioBlocked) {
         audioBlocked = false;
         post({ type: "audio-unlocked" });
@@ -81,14 +89,13 @@
     }
 
     async function initAudio() {
-      if (audioReady) return audioReady;
-
-      audioReady = (async () => {
+      if (!audioReady) audioReady = (async () => {
         if (navigator.audioSession) navigator.audioSession.type = "playback";
 
         audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
         audioContext.addEventListener("statechange", () => {
-          if (audioContext.state === "suspended" && !paused) {
+          if (!active) return;
+          if ((audioContext.state === "suspended" || audioContext.state === "interrupted") && !paused) {
             setAudioBlocked();
           } else if (audioContext.state === "running") {
             setAudioUnlocked();
@@ -97,6 +104,9 @@
 
         await audioContext.audioWorklet.addModule("pcm-worklet.js");
 
+      })();
+      await audioReady;
+      if (!audioNode) {
         audioNode = new AudioWorkletNode(audioContext, "pcm-player", {
           numberOfInputs: 0,
           numberOfOutputs: 1,
@@ -104,10 +114,8 @@
         });
 
         audioNode.connect(audioContext.destination);
-        if (!(await unlockAudio())) setAudioBlocked();
-      })();
-
-      return audioReady;
+      }
+      if (!(await unlockAudio())) setAudioBlocked();
     }
 
     globalThis.writeAudio = bytes => {
@@ -120,7 +128,20 @@
       return Math.max(0, audioContext.currentTime - playbackStartTime);
     };
 
-    globalThis.playbackPaused = () => paused;
+    globalThis.playbackPaused = () => paused || (!!audioContext && audioContext.state !== "running");
+    globalThis.playbackStopped = () => stopped;
+
+    globalThis.stopPlayback = () => {
+      stopped = true;
+      active = false;
+      paused = false;
+      audioBlocked = false;
+      removeGestureUnlock();
+      if (audioNode) {
+        audioNode.disconnect();
+        audioNode = null;
+      }
+    };
 
     globalThis.pausePlayback = async () => {
       paused = true;
@@ -154,11 +175,9 @@
 
     term.open(document.getElementById("terminal"));
 
-    try {
-      term.loadAddon(new WebglAddon.WebglAddon());
-    } catch {
-      // do nothing, xterm uses the canvas/DOM engine
-    }
+    const playbackTerminal = new PlaybackTerminal(term);
+    let playbackFailed = false;
+    playbackTerminal.start();
 
     const terminalScreen = term.element.querySelector(".xterm-screen");
     const reportTerminalHeight = () => {
@@ -170,6 +189,7 @@
     globalThis.renderScreen = screen => term.write(screen);
 
     globalThis.renderError = error => {
+      playbackFailed = true;
       const message = String(error);
       console.error(message);
       term.write(`\r\n\x1b[31m${message}\x1b[0m\r\n`);
@@ -177,6 +197,10 @@
     };
 
     globalThis.playbackEnded = () => {
+      active = false;
+      audioBlocked = false;
+      removeGestureUnlock();
+      playbackTerminal.finish(!playbackFailed);
       post({ type: "playback-ended" });
     };
 
@@ -185,9 +209,23 @@
       post({ type: "playback-started" });
     };
 
+    globalThis.playerReady = () => {
+      wasmReady = true;
+      post({ type: "player-ready" });
+    };
+
     window.addEventListener("message", async event => {
+      if (event.source !== parent) return;
+      if (event.data?.type === "request-ready") {
+        if (wasmReady) post({ type: "player-ready" });
+        return;
+      }
       if (event.data?.type !== "play") return;
 
+      playbackFailed = false;
+      stopped = false;
+      active = true;
+      playbackTerminal.start();
       try {
         document.title = event.data.name || "duh vgmweb";
 
@@ -211,7 +249,7 @@
     const go = new Go();
 
     WebAssembly.instantiateStreaming(
-      fetch("vgmweb.wasm?v=header-alignment-1"),
+      fetch("vgmweb.wasm?v=stop-1"),
       go.importObject
     )
       .then(({ instance }) => go.run(instance))

@@ -103,6 +103,7 @@
         <select id="bank" disabled></select>
       </label>
       <button id="play" type="button" disabled>Play</button>
+      <button id="stop" type="button" disabled>Stop</button>
       <button id="pause" type="button" disabled>Pause</button>
     </div>
     <div id="info">
@@ -114,7 +115,7 @@
 
   <iframe
     id="terminal-frame"
-    src="mid.html?v=pause-1"
+    src="mid.html?v=stop-1"
     title="MIDI player"
     allow="autoplay">
   </iframe>
@@ -128,6 +129,7 @@
     const chooseButton = document.getElementById("choose");
     const bankSelect = document.getElementById("bank");
     const playButton = document.getElementById("play");
+    const stopButton = document.getElementById("stop");
     const pauseButton = document.getElementById("pause");
     const status = document.getElementById("status");
     const fileName = document.getElementById("file-name");
@@ -140,7 +142,7 @@
     document.addEventListener("visibilitychange", () => playbackWakeLock.visibilityChanged());
     window.addEventListener("pagehide", () => playbackWakeLock.stop());
     window.addEventListener("pageshow", event => {
-      if (event.persisted && playing && started && !paused) playbackWakeLock.start();
+      if (event.persisted && playing && started && !paused && !audioBlocked) playbackWakeLock.start();
     });
 
     let selectedFile = null;
@@ -150,14 +152,17 @@
     let paused = false;
     let controlPending = false;
     let audioBlocked = false;
+    let playbackFailed = false;
+    let stopping = false;
 
     function updateReady() {
       const ready = wasmReady && selectedFile !== null && !playing && !controlPending;
       playButton.disabled = !ready;
-      bankSelect.disabled = !wasmReady || playing;
-      fileInput.disabled = playing;
-      chooseButton.disabled = playing;
+      bankSelect.disabled = !wasmReady || playing || controlPending;
+      fileInput.disabled = playing || controlPending;
+      chooseButton.disabled = playing || controlPending;
       pauseButton.disabled = !playing || !started || controlPending;
+      stopButton.disabled = !playing || !started || controlPending;
     }
 
     function setStatus(text, state) {
@@ -189,6 +194,7 @@
     };
 
     window.addEventListener("message", event => {
+      if (event.source !== terminal.contentWindow) return;
       const data = event.data;
       if (!data || typeof data !== "object") return;
 
@@ -199,33 +205,44 @@
       } else if (data.type === "playback-started") {
         started = true;
         updateReady();
-        if (!audioBlocked) setStatus("Playing", "playing");
+        if (!audioBlocked) {
+          playbackWakeLock.start();
+          setStatus("Playing", "playing");
+        }
       } else if (data.type === "audio-blocked") {
+        if (!playing || stopping) return;
         audioBlocked = true;
+        playbackWakeLock.stop();
         setStatus("Tap the terminal to enable sound", "error");
       } else if (data.type === "audio-unlocked") {
+        if (!playing || stopping) return;
         audioBlocked = false;
-        if (!paused) setStatus("Playing", "playing");
+        if (playing && started && !paused) {
+          playbackWakeLock.start();
+          setStatus("Playing", "playing");
+        }
       } else if (data.type === "error") {
-        // If the iframe reports an init error (e.g. autoplay blocked),
-        // unstick the UI so the user can retry.
-        globalThis.playbackEnded();
-        renderError(String(data.message ?? "unknown error"));
+        playbackFailed = true;
+        setStatus(String(data.message ?? "unknown error"), "error");
       }
     });
 
     globalThis.playbackEnded = () => {
+      const message = stopping ? "Stopped." : "Playback finished.";
       playing = false;
       started = false;
       paused = false;
       audioBlocked = false;
+      stopping = false;
+      controlPending = false;
       pauseButton.textContent = "Pause";
       playbackWakeLock.stop();
-      if (wasmReady) setStatus(selectedFile ? "Ready" : "Choose a file", "ready");
+      if (wasmReady && !playbackFailed) setStatus(message, "ready");
       updateReady();
     };
 
     globalThis.renderError = message => {
+      playbackFailed = true;
       setStatus(message, "error");
       console.error(message);
       // Best-effort: also surface it in the iframe terminal.
@@ -260,17 +277,22 @@
     playButton.addEventListener("click", async () => {
       if (!selectedFile || !wasmReady || playing || controlPending) return;
 
-      if (selectedFile.size > MAX_FILE_SIZE) {
-        renderError("MIDI files must be 10 MiB or smaller.");
+      if (!selectedFile.size || selectedFile.size > MAX_FILE_SIZE) {
+        renderError("MIDI files must be between 1 byte and 10 MiB.");
         return;
       }
 
+      playbackFailed = false;
+      controlPending = true;
+      updateReady();
       // Read the file *before* flipping UI state, so a read error doesn't
       // leave us stuck in "playing".
       let buffer;
       try {
         buffer = await selectedFile.arrayBuffer();
       } catch (err) {
+        controlPending = false;
+        updateReady();
         renderError(`Could not read file: ${err}`);
         return;
       }
@@ -279,7 +301,7 @@
       const bankNumber = Number(bankSelect.value);
 
       playing = true;
-      playbackWakeLock.start();
+      controlPending = false;
       setStatus("Synthesizing", "playing");
       updateReady();
 
@@ -295,6 +317,22 @@
         setStatus("Ready", "ready");
         updateReady();
         renderError(`Could not start playback: ${err}`);
+      }
+    });
+
+    stopButton.addEventListener("click", () => {
+      if (!playing || !started || controlPending) return;
+      controlPending = true;
+      stopping = true;
+      updateReady();
+      try {
+        terminal.contentWindow.stopPlayback();
+        setStatus("Stopping...", "playing");
+      } catch (error) {
+        controlPending = false;
+        stopping = false;
+        setStatus(`Could not stop: ${error.message || String(error)}`, "error");
+        updateReady();
       }
     });
 

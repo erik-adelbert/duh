@@ -23,12 +23,27 @@ type testAudio struct {
 
 type controlledAudio struct {
 	paused  atomic.Bool
+	stopped atomic.Bool
 	elapsed atomic.Int64
 	writes  atomic.Int32
 }
 
+type finalEOFReader struct {
+	data []byte
+}
+
+func (r *finalEOFReader) Read(p []byte) (int, error) {
+	n := copy(p, r.data)
+	r.data = r.data[n:]
+	if len(r.data) == 0 {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
 func (a *controlledAudio) Elapsed() time.Duration { return time.Duration(a.elapsed.Load()) }
 func (a *controlledAudio) Paused() bool           { return a.paused.Load() }
+func (a *controlledAudio) Stopped() bool          { return a.stopped.Load() }
 func (a *controlledAudio) Write(p []byte) (int, error) {
 	a.writes.Add(1)
 	return len(p), nil
@@ -36,6 +51,7 @@ func (a *controlledAudio) Write(p []byte) (int, error) {
 
 func (a *testAudio) Elapsed() time.Duration { return time.Since(a.start) }
 func (a *testAudio) Paused() bool           { return a.paused.Load() }
+func (a *testAudio) Stopped() bool          { return false }
 func (a *testAudio) Write(p []byte) (int, error) {
 	if a.short {
 		return len(p) - 1, nil
@@ -80,6 +96,7 @@ func TestPausePreventsReadsAndDefersDrain(t *testing.T) {
 	if audio.writes.Load() != 0 {
 		t.Fatal("wrote audio while paused")
 	}
+
 	audio.paused.Store(false)
 	deadline := time.After(time.Second)
 	for audio.writes.Load() == 0 {
@@ -105,5 +122,41 @@ func TestPausePreventsReadsAndDefersDrain(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("playback did not finish after resuming")
 		}
+	}
+}
+
+func TestStopWhilePaused(t *testing.T) {
+	audio := &controlledAudio{}
+	audio.paused.Store(true)
+	done := make(chan error, 1)
+	go func() { done <- play(bytes.NewReader([]byte{1, 2, 3, 4}), audio) }()
+	audio.stopped.Store(true)
+	select {
+	case err := <-done:
+		if err != nil || audio.writes.Load() != 0 {
+			t.Fatalf("stop while paused: error %v, writes %d", err, audio.writes.Load())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("playback did not stop while paused")
+	}
+}
+
+func TestStopDuringDrain(t *testing.T) {
+	audio := &controlledAudio{}
+	done := make(chan error, 1)
+	go func() { done <- play(&finalEOFReader{data: []byte{1, 2, 3, 4}}, audio) }()
+	for deadline := time.Now().Add(time.Second); audio.writes.Load() == 0; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("audio was not written")
+		}
+	}
+	audio.stopped.Store(true)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("playback did not stop during drain")
 	}
 }

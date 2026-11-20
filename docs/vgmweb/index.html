@@ -72,19 +72,21 @@
       <input id="file" type="file" accept=".vgm,.vgz" hidden>
       <button id="choose">Choose VGM</button>
       <button id="play" disabled>Play</button>
+      <button id="stop" disabled>Stop</button>
       <button id="pause" disabled>Pause</button>
     </div>
     <div id="wake-lock-status" role="status"></div>
 
     <div id="info">
-      Grab an OPL3 file from OPL Archive.
-      Please don't hammer the site.
+      <span id="status" role="status">Loading player...</span><br>
+      <span id="file-name">No file selected</span><span> / PCM 44.100 kHz stereo</span><br>
+      Grab an OPL3 file from OPL Archive. Please don't hammer the site.
     </div>
   </div>
 
   <iframe
     id="terminal-frame"
-    src="vgm.html?v=header-alignment-1"
+    src="vgm.html?v=stop-1"
     title="VGM player"
     allow="autoplay">
   </iframe>
@@ -94,17 +96,22 @@
     const fileInput = document.getElementById("file");
     const chooseButton = document.getElementById("choose");
     const playButton = document.getElementById("play");
+    const stopButton = document.getElementById("stop");
     const pauseButton = document.getElementById("pause");
-    const info = document.getElementById("info");
+    const status = document.getElementById("status");
+    const fileName = document.getElementById("file-name");
     const wakeLockStatus = document.getElementById("wake-lock-status");
-    const defaultInfo = "Grab an OPL3 file from OPL Archive.\nPlease don't hammer the site.";
+    const maxFileSize = 50 * 1024 * 1024;
 
-    let pendingFile;
+    let selectedFile = null;
+    let wasmReady = false;
     let playbackError = false;
     let audioBlocked = false;
     let playing = false;
+    let started = false;
     let paused = false;
     let controlPending = false;
+    let stopping = false;
     const playbackWakeLock = new PlaybackWakeLock(
       navigator.wakeLock,
       () => document.visibilityState === "visible",
@@ -113,85 +120,143 @@
     document.addEventListener("visibilitychange", () => playbackWakeLock.visibilityChanged());
     window.addEventListener("pagehide", () => playbackWakeLock.stop());
     window.addEventListener("pageshow", event => {
-      if (event.persisted && playing && !paused) playbackWakeLock.start();
+      if (event.persisted && playing && started && !paused && !audioBlocked) playbackWakeLock.start();
     });
+
+    function updateControls() {
+      playButton.disabled = !wasmReady || !selectedFile || playing || controlPending;
+      chooseButton.disabled = playing || controlPending;
+      fileInput.disabled = playing || controlPending;
+      pauseButton.disabled = !playing || !started || controlPending;
+      stopButton.disabled = !playing || !started || controlPending;
+    }
+
+    function requestReady() {
+      terminal.contentWindow.postMessage({ type: "request-ready" }, "*");
+    }
+
+    terminal.addEventListener("load", () => {
+      wasmReady = false;
+      updateControls();
+      requestReady();
+    });
+    requestReady();
 
     window.addEventListener("message", event => {
       if (event.source !== terminal.contentWindow) return;
       if (event.data?.type === "terminal-height") {
         const height = event.data.height;
         if (Number.isFinite(height) && height > 0) terminal.style.height = `${Math.ceil(height)}px`;
+      } else if (event.data?.type === "player-ready") {
+        wasmReady = true;
+        if (!playbackError) status.textContent = selectedFile ? "Ready." : "Choose a file.";
+        updateControls();
       } else if (event.data?.type === "playback-ended") {
         playing = false;
+        started = false;
         paused = false;
-        pauseButton.disabled = true;
+        audioBlocked = false;
+        controlPending = false;
         pauseButton.textContent = "Pause";
         playbackWakeLock.stop();
-        chooseButton.disabled = false;
-        if (!playbackError) {
-          info.textContent = audioBlocked ? "Tap the player to enable sound" : defaultInfo;
-        }
+        if (!playbackError) status.textContent = stopping ? "Stopped." : "Playback finished.";
+        stopping = false;
+        updateControls();
       } else if (event.data?.type === "playback-started") {
-        playing = true;
-        pauseButton.disabled = false;
-        if (!audioBlocked) info.textContent = "Playing";
+        started = true;
+        updateControls();
+        if (!audioBlocked) {
+          playbackWakeLock.start();
+          status.textContent = "Playing.";
+        }
       } else if (event.data?.type === "audio-blocked") {
+        if (!playing || stopping) return;
         audioBlocked = true;
-        info.textContent = "Tap the player to enable sound";
+        playbackWakeLock.stop();
+        status.textContent = "Tap the player to enable sound.";
       } else if (event.data?.type === "audio-unlocked") {
+        if (!playing || stopping) return;
         audioBlocked = false;
-        info.textContent = "Playing";
+        if (playing && started && !paused) {
+          playbackWakeLock.start();
+          status.textContent = "Playing.";
+        }
       } else if (event.data?.type === "error") {
         playbackError = true;
-        info.textContent = String(event.data.message ?? "unknown error");
-        chooseButton.disabled = false;
+        status.textContent = String(event.data.message ?? "unknown error");
       }
     });
 
-    chooseButton.onclick = () => {
-      fileInput.click();
-      chooseButton.disabled = true;
-    };
+    chooseButton.onclick = () => fileInput.click();
 
-    fileInput.onchange = async () => {
-      const file = fileInput.files[0];
-      if (!file) return;
-
-      pendingFile = {
-        data: await file.arrayBuffer(),
-        name: file.name
-      };
-
+    fileInput.onchange = () => {
+      selectedFile = fileInput.files[0] ?? null;
+      fileName.textContent = selectedFile ? selectedFile.name : "No file selected";
       playbackError = false;
-      info.textContent = defaultInfo;
-      playButton.disabled = false;
+      status.textContent = selectedFile ? "Ready." : "Choose a file.";
+      updateControls();
     };
 
-    playButton.onclick = () => {
-      if (!pendingFile) return;
-
-      playbackWakeLock.start();
-      try {
-        terminal.contentWindow.postMessage({
-          type: "play",
-          ...pendingFile
-        }, "*");
-      } catch (error) {
-        playbackWakeLock.stop();
-        info.textContent = `Could not start playback: ${error.message || String(error)}`;
-        chooseButton.disabled = false;
+    playButton.onclick = async () => {
+      if (!wasmReady || !selectedFile || playing || controlPending) return;
+      if (!selectedFile.size || selectedFile.size > maxFileSize) {
+        status.textContent = "VGM files must be between 1 byte and 50 MiB.";
         return;
       }
 
-      pendingFile = null;
-      chooseButton.disabled = true;
-      playButton.disabled = true;
+      playbackError = false;
+      controlPending = true;
+      status.textContent = "Loading file...";
+      updateControls();
+      let buffer;
+      try {
+        buffer = await selectedFile.arrayBuffer();
+      } catch (error) {
+        controlPending = false;
+        status.textContent = `Could not read file: ${error.message || String(error)}`;
+        updateControls();
+        return;
+      }
+
+      playing = true;
+      controlPending = false;
+      status.textContent = "Starting playback...";
+      updateControls();
+      try {
+        terminal.contentWindow.postMessage({
+          type: "play",
+          data: buffer,
+          name: selectedFile.name
+        }, "*", [buffer]);
+      } catch (error) {
+        playing = false;
+        playbackWakeLock.stop();
+        status.textContent = `Could not start playback: ${error.message || String(error)}`;
+        updateControls();
+        return;
+      }
+    };
+
+    stopButton.onclick = () => {
+      if (!playing || !started || controlPending) return;
+      controlPending = true;
+      stopping = true;
+      updateControls();
+      try {
+        terminal.contentWindow.stopPlayback();
+        status.textContent = "Stopping...";
+      } catch (error) {
+        controlPending = false;
+        stopping = false;
+        status.textContent = `Could not stop: ${error.message || String(error)}`;
+        updateControls();
+      }
     };
 
     pauseButton.onclick = async () => {
-      if (!playing || controlPending) return;
+      if (!playing || !started || controlPending) return;
       controlPending = true;
-      pauseButton.disabled = true;
+      updateControls();
       try {
         if (paused) {
           await terminal.contentWindow.resumePlayback();
@@ -199,20 +264,20 @@
           paused = false;
           playbackWakeLock.start();
           pauseButton.textContent = "Pause";
-          info.textContent = "Playing";
+          status.textContent = "Playing.";
         } else {
           await terminal.contentWindow.pausePlayback();
           if (!playing) return;
           paused = true;
           playbackWakeLock.stop();
           pauseButton.textContent = "Resume";
-          info.textContent = "Paused";
+          status.textContent = "Paused.";
         }
       } catch (error) {
-        info.textContent = `Could not ${paused ? "resume" : "pause"}: ${error.message || String(error)}`;
+        if (playing) status.textContent = `Could not ${paused ? "resume" : "pause"}: ${error.message || String(error)}`;
       } finally {
         controlPending = false;
-        pauseButton.disabled = !playing;
+        updateControls();
       }
     };
   </script>

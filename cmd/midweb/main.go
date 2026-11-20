@@ -290,6 +290,10 @@ func (o *JSOut) Paused() bool {
 	return o.paused.Type() == js.TypeFunction && o.paused.Invoke().Bool()
 }
 
+func (o *JSOut) Stopped() bool {
+	return js.Global().Call("playbackStopped").Bool()
+}
+
 func (o *JSOut) Write(p []byte) (int, error) {
 	var buf js.Value
 	if o.acquire.Type() == js.TypeFunction {

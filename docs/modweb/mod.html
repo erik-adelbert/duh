@@ -9,6 +9,7 @@
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.19.0/lib/addon-webgl.js"></script>
+  <script src="../midweb/playback-terminal.js?v=1"></script>
 </head>
 <body>
   <div id="terminal"></div>
@@ -18,9 +19,16 @@
       fontFamily: '"JetBrains Mono", "DejaVu Sans Mono", monospace', fontSize: 13, lineHeight: 1.1
     });
     term.open(document.getElementById("terminal"));
-    try { term.loadAddon(new WebglAddon.WebglAddon()); } catch { /* use the default renderer */ }
+    const playbackTerminal = new PlaybackTerminal(term);
+    playbackTerminal.start();
     window.addEventListener("message", event => {
-      if (event.source === parent && event.data?.type === "screen") term.write(event.data.screen);
+      if (event.source !== parent) return;
+      if (event.data?.type === "screen") {
+        playbackTerminal.start();
+        term.write(event.data.screen);
+      } else if (event.data?.type === "clear-screen") {
+        playbackTerminal.finish(true);
+      }
     });
   </script>
 </body>
