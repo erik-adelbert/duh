@@ -54,14 +54,20 @@ func TestOPL3StateInitialAndUpdates(t *testing.T) {
 }
 
 func TestOPL3StatusFlagAlignment(t *testing.T) {
-	old := NO_COLOR
+	old, oldStatusOn := NO_COLOR, statusOn
 	NO_COLOR = false
-	t.Cleanup(func() { NO_COLOR = old })
+	t.Cleanup(func() { NO_COLOR, statusOn = old, oldStatusOn })
+	// The production labels are styled at package initialization, before this test enables color.
+	for i, label := range statusLabels {
+		if label != "" {
+			statusOn[i] = Invert(Green(Bold(label)))
+		}
+	}
 	var out strings.Builder
 	status(&out, opl3.Flags(1<<opl3.CSM))
-	if !strings.Contains(out.String(), Green(Bold("CSM"))) ||
-		strings.Contains(out.String(), Green(Bold("WF"))) {
-		t.Fatalf("CSM status not aligned: %q", out.String())
+	if !strings.Contains(out.String(), Invert(Green(Bold("CSM")))) ||
+		strings.Contains(out.String(), Invert(Green(Bold("WF")))) {
+		t.Fatalf("CSM status not aligned: %q %q", out.String(), Invert(Green(Bold("CSM"))))
 	}
 }
 
