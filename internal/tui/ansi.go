@@ -35,9 +35,9 @@ const (
 
 	ANSIInvertedColor = "\033[7m"
 
-	ANSICLS   = "\033[H\033[2J"
 	ANSIHome  = "\033[H"
 	ANSIClear = "\033[2J"
+	ANSICLS   = ANSIHome + ANSIClear
 
 	ANSICursorOff = "\033[?25l"
 	ANSICursorOn  = "\033[?25h"
@@ -64,31 +64,19 @@ func bandColorIndex(i, w int) int {
 }
 
 func barColorVu(i, w int) Colorizer {
-	rat := float64(i) / float64(w)
-
 	switch {
-	case rat > 0.87:
-		return Red
-	case rat > 0.55:
-		return Yellow
-	default:
+	case w == 0:
 		return Green
-	}
-}
-
-func Invert(s string) string {
-	if NO_COLOR {
-		return s
+	case 100*i > 87*w:
+		return Red
+	case 100*i > 55*w:
+		return Yellow
 	}
 
-	return ANSIInvertedColor + s + ANSIReset
+	return Green
 }
 
 func Bold(s string) string {
-	// if NO_COLOR {
-	// 	return s
-	// }
-
 	return ANSIBold + s + ANSIReset
 }
 
@@ -104,10 +92,6 @@ func mkColorizer(color string) Colorizer {
 	}
 }
 
-func SysColor(s string) string {
-	return s
-}
-
 var (
 	Red    = mkColorizer(ANSIRed)
 	Green  = mkColorizer(ANSIGreen)
@@ -118,7 +102,7 @@ var (
 	DarkGrey    = mkColorizer(ANSIDarkGrey)
 	InvDarkGrey = mkColorizer(ANSIBlackOnDarkGrey)
 
-	// Invert = mkColorizer(ANSIInvertedColor)
+	Invert = mkColorizer(ANSIInvertedColor)
 )
 
 // NoColor checks if the terminal should disable color output.

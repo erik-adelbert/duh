@@ -134,7 +134,7 @@ type OP struct {
 	WF Waveform
 }
 
-type OpFlags uint8
+type OpFlags int
 
 const (
 	KSR OpFlags = iota

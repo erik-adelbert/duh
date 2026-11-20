@@ -5,23 +5,37 @@
 package tui
 
 import (
-	"fmt"
 	"time"
 )
 
 func TimerString(d time.Duration) string {
-	hours := int(d.Hours())
+	var buf [15]byte // "HH:MM:SS.CC" = 11, "MM:SS.CC" = 8
 
-	minutes := int(d.Minutes()) % 60
-	seconds := int(d.Seconds()) % 60
-
-	hundredths := int(d.Milliseconds()/10) % 100
-
-	if hours > 0 {
-		return fmt.Sprintf(
-			"%02d:%02d:%02d.%02d", hours, minutes, seconds, hundredths,
-		)
+	ms := d.Milliseconds()
+	if ms < 0 {
+		ms = -ms // or handle sign explicitly
 	}
 
-	return fmt.Sprintf("%02d:%02d.%02d", minutes, seconds, hundredths)
+	hundredths := (ms / 10) % 100
+	s := ms / 1000
+	sec := s % 60
+	m := s / 60
+	min := m % 60
+	hr := m / 60
+
+	b := buf[:0]
+	if hr > 0 {
+		b = append2(b, hr)
+		b = append(b, ':')
+	}
+	b = append2(b, min)
+	b = append(b, ':')
+	b = append2(b, sec)
+	b = append(b, '.')
+	b = append2(b, hundredths)
+	return string(b) // one alloc (the string)
+}
+
+func append2(b []byte, v int64) []byte {
+	return append(b, byte('0'+v/10), byte('0'+v%10))
 }

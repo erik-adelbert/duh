@@ -31,7 +31,7 @@ func mkPlaybackScreen(m *model, pads string) *tui.Screen {
 
 		if m.withSpecto {
 			sb.WriteByte('\n')
-			_, _ = m.spectro.FRender(sb, pads)
+			m.spectro.FRender(sb, pads)
 		}
 
 		fmt.Fprintf(sb,

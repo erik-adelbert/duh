@@ -237,7 +237,7 @@ func display(screen Printer, w *webtui, quit <-chan struct{}, audio *JSOut) erro
 
 			fmt.Fprintf(&sb, "%s\n  %s\n", pads, title)
 
-			_, _ = w.sp.FRender(&sb, pads)
+			w.sp.FRender(&sb, pads)
 
 			sb.WriteString("\n  L ")
 			w.vbL.Frender(&sb, WidgetWidth)

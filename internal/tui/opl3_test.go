@@ -95,3 +95,25 @@ func TestOPL3HeaderAlignment(t *testing.T) {
 		}
 	}
 }
+
+func TestOPL3OperatorRowsAlignment(t *testing.T) {
+	view := NewOPL3State()
+	var scratch, rendered strings.Builder
+	view.Update(&scratch, opl3.State{})
+	view.Render(&rendered, "  ")
+
+	ansi := regexp.MustCompile("\x1b\\[[0-9;]*m")
+	lines := strings.Split(ansi.ReplaceAllString(rendered.String(), ""), "\n")
+	for id := range opl3.ChannelCount {
+		op0Line := lines[3+2*id]
+		op1Line := lines[4+2*id]
+		op0 := fmt.Sprintf("Ch%02d-0:", id)
+		op1 := fmt.Sprintf("Ch%02d-1:", id)
+		op0Start, op1Start := strings.Index(op0Line, op0), strings.Index(op1Line, op1)
+		if op0Start < 0 || op1Start < 0 {
+			t.Errorf("missing operator labels %s or %s", op0, op1)
+		} else if op0Start != op1Start {
+			t.Errorf("%s starts at %d, %s starts at %d", op0, op0Start, op1, op1Start)
+		}
+	}
+}

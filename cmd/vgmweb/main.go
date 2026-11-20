@@ -238,7 +238,7 @@ func display(screen Printer, w *webtui, quit chan struct{}, audio *JSOut) (err e
 
 			fmt.Fprintf(&sb, "%s\n  %s\n", pads, title)
 
-			_, _ = sp.FRender(&sb, pads)
+			sp.FRender(&sb, pads)
 
 			sb.WriteString("\n  L ")
 			vbL.Frender(&sb, WidgetWidth)

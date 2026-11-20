@@ -250,7 +250,7 @@ func play(oto *backend.OtoBackend, in *vgm.Decoder, a args) (err error) {
 			fmt.Fprintf(&sb, "%sduh vgmtui - Ctrl+C to exit\n\n  %s\n\n", pads, title)
 
 			if a.spectro {
-				_, _ = sp.FRender(&sb, pads)
+				sp.FRender(&sb, pads)
 			}
 
 			if a.vubar {

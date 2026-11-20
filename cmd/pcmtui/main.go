@@ -220,7 +220,7 @@ func play(oto *backend.OtoBackend, in io.Reader, a args) (err error) {
 			fmt.Fprintf(&sb, "%s%s / %s\n", pads, tui.TimerString(elapsed), a.dt)
 
 			if a.spectro {
-				_, _ = sp.FRender(&sb, pads)
+				sp.FRender(&sb, pads)
 			}
 
 			if a.vubar {

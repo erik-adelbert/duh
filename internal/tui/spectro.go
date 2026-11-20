@@ -93,16 +93,11 @@ func NewSpectro(sampleRate int, minHz, maxHz float64, bandCount int, emoji bool)
 func (sp *Spectro) Render(pads string) string {
 	var sb strings.Builder
 
-	_, err := sp.FRender(&sb, pads)
-
-	if err != nil {
-		return ""
-	}
-
+	sp.FRender(&sb, pads)
 	return sb.String()
 }
 
-func (sp *Spectro) FRender(sb *strings.Builder, pads string) (n int, err error) {
+func (sp *Spectro) FRender(sb *strings.Builder, pads string) {
 
 	cur := sp.val
 
@@ -210,8 +205,6 @@ func (sp *Spectro) FRender(sb *strings.Builder, pads string) (n int, err error) 
 	sb.WriteString(pads)
 	sb.WriteString(sp.ruler1)
 	sb.WriteByte('\n')
-
-	return
 }
 
 type logRuler struct {

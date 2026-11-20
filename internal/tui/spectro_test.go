@@ -61,9 +61,7 @@ func BenchmarkSpectroUpdate(b *testing.B) {
 			sp.Addf64(0.3*math.Sin(x*220) + 0.2*math.Sin(x*1200))
 		}
 		out.Reset()
-		if _, err := sp.FRender(&out, "  "); err != nil {
-			b.Fatal(err)
-		}
+		sp.FRender(&out, "  ")
 	}
 }
 
@@ -106,9 +104,7 @@ func TestSpectroRenderAllocations(t *testing.T) {
 	}
 	allocs := testing.AllocsPerRun(100, func() {
 		var out strings.Builder
-		if _, err := sp.FRender(&out, "  "); err != nil {
-			t.Fatal(err)
-		}
+		sp.FRender(&out, "  ")
 	})
 	if allocs > 40 {
 		t.Fatalf("spectrum render allocated %.0f times, want at most 40", allocs)
