@@ -76,7 +76,7 @@ Run `go test ./...` to test the project. The browser builds are separate:
 - `wavdec`, `wavenc`, `wavinfo`, `mp3dec`, `mp3enc`, `mp3info`,
   `aacdec`, `aacenc`, and `aacinfo` work with WAV, MP3 and AAC.
 - `middec` renders MIDI files, `midsynth` handles live MIDI input, and
-  `moddec` renders S3M, IT and experimental MPTM modules.
+  `moddec` renders S3M, IT, experimental MPTM and basic ProTracker MOD modules.
 - `vgmdec`, `vgminfo`, and `vgmwav` work with VGM files.
 - `pcmtui`, `wavtui`, and `vgmtui` play audio with terminal interfaces.
 - `ppunpack` and `unmmcmp` decompress PP20 and MMCMP files.
@@ -115,10 +115,12 @@ changed via DUH SysEx; doing so does not recalculate the `-four-ops` setting.
 
 ## Tracker decoding
 
-`moddec` decodes the tracker formats supported by the `mod` package: S3M,
-IT and an experimental subset of MPTM, including MMCMP-wrapped modules. It
-auto-detects the format from the input; `mod` is the package name, not a claim
-of ProTracker MOD support.
+`moddec` auto-detects S3M, IT, experimental MPTM and basic ProTracker MOD.
+MOD support currently covers classic four-channel `M.K.` files: notes,
+samples and sample loops play, with selected timing, volume, pitch, and sample
+effects. Unsupported effects are skipped with warnings.
+See the [tracker compatibility inventory](documentation/tracker/tracker-compatibility.md)
+for details, including MMCMP support.
 
 ```sh
 go run ./cmd/moddec /path/to/song.it | ffplay -nodisp -autoexit -f f32le -sample_rate 48000 -ch_layout stereo -

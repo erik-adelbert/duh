@@ -25,7 +25,17 @@ func TickSchedulerSystem(w *Tracker) bool {
 		c.Tick = 0
 		w.mptRowDelay = 0
 		w.mptFrameDelay = 0
-		if w.Assets.IT && w.itFlowPending {
+		if w.Assets.proTracker && w.modBreakRow >= 0 {
+			c.Order++
+			if w.modJumpOrder >= 0 {
+				c.Order = w.modJumpOrder
+			}
+			c.Row = w.modBreakRow
+			w.modBreakRow, w.modJumpOrder, w.modLoopRow = -1, -1, -1
+		} else if w.Assets.proTracker && w.modLoopRow >= 0 {
+			c.Row = w.modLoopRow
+			w.modLoopRow = -1
+		} else if w.Assets.IT && w.itFlowPending {
 			if w.itFlowBreak && !w.loopProfile().preserveOnBreak && c.Order != w.itNextOrder {
 				for t := 0; t < w.Assets.NumTracks; t++ {
 					w.TrackMemories[t].itLoopCount = 0
@@ -70,7 +80,12 @@ func TickSchedulerSystem(w *Tracker) bool {
 	if c.Tick == 0 && w.mptVisitedRows != nil {
 		state := mptVisitedRow{order: c.Order, row: c.Row}
 		for track := 0; track < w.Assets.NumTracks; track++ {
-			state.loopCounts[track] = w.TrackMemories[track].itLoopCount
+			if w.Assets.proTracker {
+				state.loopCounts[track] = w.TrackCursors[track].modLoopCount
+				state.modLoopStarts[track] = w.TrackCursors[track].modLoopStart
+			} else {
+				state.loopCounts[track] = w.TrackMemories[track].itLoopCount
+			}
 		}
 
 		if _, visited := w.mptVisitedRows[state]; visited {
@@ -182,6 +197,11 @@ func VoiceAllocationSystem(w *Tracker) {
 }
 
 func (w *Tracker) allocateTrackVoice(t int, cmd ModCommand) {
+	if w.Assets.proTracker {
+		w.allocateProTrackerVoice(t, cmd)
+		return
+	}
+
 	cursor := &w.TrackCursors[t]
 	if w.Assets.IT && w.Assets.ITMuted[t] {
 		return
@@ -643,6 +663,11 @@ func releaseITVoice(w *Tracker, v VoiceID) {
 
 // GlobalFlowSystem handles speed, tempo, order jumps, pattern breaks and IT pattern loops.
 func GlobalFlowSystem(w *Tracker) {
+	if w.Assets.proTracker {
+		w.applyProTrackerFlow()
+		return
+	}
+
 	c := &w.Clock
 
 	if !w.Assets.ITCompatibility.mptTempoAsSpeed {

@@ -2,8 +2,8 @@
 // Licensed under the BSD 3-Clause license; see ../../LICENCE.
 // For OpenMPT attribution and dependency licenses, see NOTICE.
 
-// Package mod decodes S3M and IT tracker modules and an experimental subset of
-// MPTM into PCM audio.
+// Package mod decodes S3M and IT tracker modules and experimental subsets of
+// MPTM and ProTracker MOD into PCM audio.
 package mod
 
 import (
@@ -22,7 +22,7 @@ const (
 	decoderBlockFrames = 1024
 )
 
-// Decoder renders a supported S3M, IT, or MPTM module as f32le stereo PCM.
+// Decoder renders a supported tracker module as f32le stereo PCM.
 // Playback follows the tracker's existing end-of-song and loop behavior.
 // Decoder is not safe for concurrent use.
 type Decoder struct {
@@ -90,6 +90,11 @@ func Decode(in io.Reader, options ...DecoderOptions) (*Decoder, error) {
 			return nil, errors.New("module decode: S3M supports only sequence 0")
 		}
 		loaded, err = loadS3M(data)
+	case isProTrackerMOD(data):
+		if sequence != 0 {
+			return nil, errors.New("module decode: ProTracker MOD supports only sequence 0")
+		}
+		loaded, err = loadProTrackerMOD(data)
 	default:
 		return nil, errors.New("module decode: unsupported or invalid module format")
 	}

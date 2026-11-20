@@ -162,7 +162,9 @@ func (w *Tracker) initializeVoiceState(track TrackID, voice VoiceID, cmd ModComm
 	}
 
 	freq := noteToHz(note)
-	if w.Assets.s3m {
+	if w.Assets.proTracker {
+		freq = proTrackerFrequency(cursor.modCurrentPeriod)
+	} else if w.Assets.s3m {
 		freq = s3mNoteFrequency(note, w.Assets.Samples[sampleID].C5Speed, w.Assets.s3mFrequencyPitch)
 	} else if w.Assets.IT {
 		freq = noteToHz(note - 1)
@@ -281,6 +283,8 @@ func (w *Tracker) initializeVoicePlayback(track TrackID, voice VoiceID, cmd ModC
 	offset := 0
 
 	switch {
+	case w.Assets.proTracker && cmd.EffectCmd == modSampleOffset:
+		offset = int(w.TrackMemories[track].LastOffset) * 256
 	case cmd.EffectCmd == 0x12:
 		if cmd.EffectArg != 0 {
 			w.TrackMemories[track].LastOffset = cmd.EffectArg

@@ -1,4 +1,4 @@
-// moddec decodes S3M, IT and MPTM files to raw stereo PCM.
+// moddec decodes tracker modules to raw stereo PCM.
 package main
 
 import (
@@ -69,7 +69,7 @@ type flags struct {
 
 func parseFlags() flags {
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Decode S3M, IT and MPTM files to f32le stereo PCM at 48000 Hz")
+		fmt.Fprintln(os.Stderr, "Decode S3M, IT, experimental MPTM and basic ProTracker M.K. MOD to f32le stereo PCM at 48000 Hz")
 		fmt.Fprintf(os.Stderr, "\nUsage: %s [flags] [file]\n\nFlags:\n", os.Args[0])
 		flag.PrintDefaults()
 	}

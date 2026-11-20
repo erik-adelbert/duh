@@ -331,6 +331,10 @@ func MixerAccumulationSystem(w *Tracker, outStereo []float32, frames int) {
 
 	mixPCMVoices(w, outStereo, frames)
 
+	if w.Assets.proTracker {
+		w.filterProTrackerMix(outStereo[:frames*2])
+	}
+
 	if w.opl != nil {
 		buf := w.oplBuffer[:frames*2]
 		w.opl.render(buf)

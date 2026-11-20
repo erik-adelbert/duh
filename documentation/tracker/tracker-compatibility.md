@@ -4,7 +4,33 @@ This is an inventory of the current `pkg/mod` decoder, not a format
 conformance claim. Loader acceptance does not guarantee OpenMPT-equivalent
 playback. In particular, MPTM support is experimental and coverage of saved
 playback flags, older versions, interactions and full-song mixing is incomplete.
-`mod` is the package name; ProTracker MOD and XM are not supported.
+ProTracker MOD support is limited to basic `M.K.` playback (see below). XM
+is not supported.
+
+## ProTracker MOD
+
+`moddec` and `modweb` support classic four-channel, 31-sample `M.K.` files.
+Patterns referenced only by inactive order entries are skipped for playback
+but counted when they explain extra pattern data before the samples. Playback uses
+the stored Amiga periods, approximates the ProTracker finetune table,
+and supports signed 8-bit samples with forward loops and left/right/right/left
+panning. Playback starts at 6 ticks per row and 125 BPM. Supported effects
+include `Fxx` (speed/tempo; `F00` is a no-op), `Bxx` (order jump), `Dxx`
+(pattern break), `Cxx`
+(set volume), `Axx` (volume slide), `0xy` (arpeggio; `000` is a no-op),
+`1xx`/`2xx` (pitch slides), `3xx` (tone portamento), `4xx` (sine vibrato),
+`5xx`/`6xx` (tone portamento/vibrato with volume slide), `7xx` (sine tremolo),
+`8xx` (8-bit panning:
+`800` left, `880` center, `8FF` right), `9xx` (sample offset),
+`E1x`/`E2x` (fine pitch slides), `E6x` (pattern loop), `E9x` (retrigger),
+`EAx`/`EBx` (fine volume slides),
+`ECx` (cut volume), `EDx` (note delay within the row),
+`EEx` (pattern delay), and
+`E0x` (an approximation of the Amiga LED low-pass filter, off at startup).
+Paula sample-pointer quirks during portamento and note delay are not emulated.
+Other effects are skipped with warnings, and song restart positions are not applied.
+
+## S3M, IT and MPTM
 
 The tables describe current implementation and known restrictions. **Partial**
 means some behavior is implemented or compared with OpenMPT, not that every

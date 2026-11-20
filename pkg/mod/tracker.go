@@ -26,6 +26,7 @@ type ModCommand struct {
 	EffectCmd  uint8
 	EffectArg  uint8
 	s3mDummy   bool
+	modPeriod  uint16
 }
 
 type PatternAsset struct {
@@ -114,6 +115,7 @@ type SampleAsset struct {
 	ITVibratoDepth    uint8
 	ITVibratoSweep    uint8
 	ITVibratoType     uint8
+	modFineTune       int8
 }
 
 type ITCompatibility struct {
@@ -176,6 +178,7 @@ type ITCompatibility struct {
 }
 
 type SongAssets struct {
+	proTracker            bool
 	s3m                   bool
 	s3mSharedEffectMemory bool
 	s3mMixGain            float32
@@ -226,10 +229,22 @@ type SequencerClock struct {
 // --- Pattern Track Components (Indexed by TrackID) ---
 
 type TrackCursor struct {
-	Muted       bool
-	ActiveVoice VoiceID // -1 if none
-	Panning     float32
-	Surround    bool
+	Muted            bool
+	ActiveVoice      VoiceID // -1 if none
+	Panning          float32
+	Surround         bool
+	modVolume        uint8
+	modCurrentPeriod int
+	modVibratoPhase  uint8
+	modVibratoSpeed  uint8
+	modVibratoDepth  uint8
+	modTremoloPhase  uint8
+	modTremoloSpeed  uint8
+	modTremoloDepth  uint8
+	modTargetPeriod  int
+	modPortaSpeed    int
+	modLoopStart     uint8
+	modLoopCount     uint8
 
 	ITFilterCutoff    uint8
 	ITFilterResonance uint8
@@ -408,8 +423,9 @@ type ITFilterState struct {
 }
 
 type mptVisitedRow struct {
-	order, row int
-	loopCounts [MaxTracks]uint8
+	order, row    int
+	loopCounts    [MaxTracks]uint8
+	modLoopStarts [modChannels]uint8
 }
 
 // --- ECS World Container ---
@@ -420,13 +436,18 @@ type Tracker struct {
 	ITGlobalVolume  uint8
 	ITChannelVolume [MaxTracks]uint8
 
-	itFlowPending bool
-	itFlowBreak   bool
-	itNextOrder   int
-	itNextRow     int
-	itLoopRow     int
-	itLoopChannel int
-	itRandom      *rand.Rand
+	modBreakRow      int // -1 when no ProTracker pattern break is pending.
+	modJumpOrder     int // -1 when there is no explicit order target.
+	modLoopRow       int
+	modFilterEnabled bool
+	modFilterState   [2][2]float64
+	itFlowPending    bool
+	itFlowBreak      bool
+	itNextOrder      int
+	itNextRow        int
+	itLoopRow        int
+	itLoopChannel    int
+	itRandom         *rand.Rand
 
 	mptRowDelay    int // Additional row repetitions.
 	mptFrameDelay  int // Additional ticks per repetition.
@@ -461,6 +482,9 @@ func NewTracker(assets SongAssets, sampleRate float64, maxBlockSize int) *Tracke
 		ITChannelVolume: assets.ITChannelVolume,
 		itLoopRow:       -1,
 		itLoopChannel:   -1,
+		modBreakRow:     -1,
+		modJumpOrder:    -1,
+		modLoopRow:      -1,
 		itRandom:        rand.New(rand.NewSource(1)),
 		Clock: SequencerClock{
 			Speed:          6,

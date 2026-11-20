@@ -8,6 +8,12 @@ import "math"
 
 // System 4A: Evaluates pitch slides, tone portamento, and vibrato LFOs.
 func PitchEffectSystem(w *Tracker) {
+	if w.Assets.proTracker {
+		for track := range w.Assets.NumTracks {
+			w.applyProTrackerPitch(track, w.PendingCmds[track])
+		}
+		return
+	}
 	for t := 0; t < w.Assets.NumTracks; t++ {
 		vID := w.TrackCursors[t].ActiveVoice
 		cmd := w.PendingCmds[t]
@@ -429,7 +435,11 @@ func (w *Tracker) initMPTDoublePortamentoMemory(mem *EffectMemory, cmd ModComman
 // System 4B: Evaluates volume slides, direct volume sets, and panning commands.
 func VolumeEffectSystem(w *Tracker) {
 	for t := 0; t < w.Assets.NumTracks; t++ {
-		w.applyTrackVolumeEffects(TrackID(t), w.PendingCmds[t])
+		if w.Assets.proTracker {
+			w.applyProTrackerVolume(TrackID(t), w.PendingCmds[t])
+		} else {
+			w.applyTrackVolumeEffects(TrackID(t), w.PendingCmds[t])
+		}
 	}
 }
 
@@ -981,6 +991,9 @@ var mptFineTuneSpeeds = [...]uint16{
 func voiceVolume(w *Tracker, voice, sampleID int) float32 {
 	life, amp := &w.VoiceLives[voice], &w.VoiceAmps[voice]
 	if !w.Assets.IT {
+		if w.Assets.proTracker {
+			return amp.Volume * 0.5 // Two full-scale Paula channels per side.
+		}
 		if w.Assets.s3m {
 			if amp.itTremorMuted {
 				return 0
