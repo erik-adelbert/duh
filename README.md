@@ -7,7 +7,9 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/erik-adelbert/duh.svg)](https://pkg.go.dev/github.com/erik-adelbert/duh)
 > An audio toolkit. Pure Go, no cgo in the toolkit, nothing you didn't ask for.
 
-`duh` is a developer library for Go. It is also a toolkit for working with audio from the shell — decoding, encoding, resampling, and the plumbing in between. The toolkit is written in Go; audio playback and external tools have their own platform requirements.
+`duh` is a developer library for Go. It is also a toolkit for working with audio from the shell — decoding, encoding, resampling, and the plumbing in between. It also includes a tracker module playback engine for S3M, IT, and experimental subsets of ProTracker MOD and MPTM, along with shell and browser players and an OPL3 chip emulator, with applications built around it: MIDI rendering, live MIDI synthesis, VGM playback, and an OPL3 register view for inspecting chip activity.
+
+The toolkit is written in Go; audio playback and external tools have their own platform requirements.
 
 ## Watch a demo on YouTube
 
