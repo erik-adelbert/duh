@@ -123,7 +123,7 @@ See the [tracker compatibility inventory](documentation/tracker/tracker-compatib
 for details, including MMCMP support.
 
 ```sh
-go run ./cmd/moddec /path/to/song.it | ffplay -nodisp -autoexit -f f32le -sample_rate 48000 -ch_layout stereo -
+go run ./cmd/moddec /path/to/song.it | go run ./cmd/pcmtui -if f32c2r48000
 cat /path/to/song.mptm | go run ./cmd/moddec > song.pcm
 ```
 
