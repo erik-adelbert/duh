@@ -162,7 +162,7 @@ requires the external `midicat` program described above.
 - aac: [tphakala](https://github.com/tphakala/go-aac)
 - mp3: [go-mp3](https://github.com/hajimehoshi/go-mp3) + [shine-mp3](https://github.com/braheezy/shine-mp3)
 - midi: [libADLMIDI](https://github.com/Wohlstand/libADLMIDI), [adlMIDI](https://github.com/bisqwit/adlmidi), [DMXOPL](https://github.com/sneakernets/DMXOPL)
-- tracker: [OpenMPT](https://openmpt.org/) is the main playback reference and provides material including the random modulation table and playback definitions
+- tracker: [OpenMPT](https://openmpt.org/)
 
 The AAC and MP3 packages use external Go modules; see [go.mod](go.mod).
 
