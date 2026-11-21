@@ -22,6 +22,8 @@ include `Fxx` (speed/tempo; `F00` is a no-op), `Bxx` (order jump), `Dxx`
 `5xx`/`6xx` (tone portamento/vibrato with volume slide), `7xx` (sine tremolo),
 `8xx` (8-bit panning:
 `800` left, `880` center, `8FF` right), `9xx` (sample offset),
+`E8x` (4-bit panning; ignored as demo synchronization if all `8xx`/`E8x`
+values remain below the OpenMPT detection threshold of `830`/`E83`),
 `E1x`/`E2x` (fine pitch slides), `E6x` (pattern loop), `E9x` (retrigger),
 `EAx`/`EBx` (fine volume slides),
 `ECx` (cut volume), `EDx` (note delay within the row),

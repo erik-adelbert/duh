@@ -96,6 +96,16 @@ func loadProTrackerMOD(data []byte) (*S3MLoadResult, error) {
 	}
 	var warnings []string
 	var warned [32]bool
+	var maxPanning uint8
+	for pos := modHeaderSize; pos < modHeaderSize+patternCount*modPatternSize; pos += 4 {
+		effect, arg := data[pos+2]&15, data[pos+3]
+		switch {
+		case effect == modSetPanning:
+			maxPanning = max(maxPanning, arg)
+		case effect == modExtended && arg>>4 == modFinePanning:
+			maxPanning = max(maxPanning, (arg&15)<<4)
+		}
+	}
 	assets.Patterns = make([]PatternAsset, patternCount)
 	for pi := range assets.Patterns {
 		rows := make([][]ModCommand, modPatternRows)
@@ -119,6 +129,14 @@ func loadProTrackerMOD(data []byte) (*S3MLoadResult, error) {
 					rows[ri][ch].EffectCmd, rows[ri][ch].EffectArg = effect, arg
 					continue
 				case modExtended:
+					if arg>>4 == modFinePanning {
+						// Low-valued panning commands are also used as demo sync markers.
+						if maxPanning >= 0x30 {
+							rows[ri][ch].EffectCmd = modSetPanning
+							rows[ri][ch].EffectArg = (arg & 15) * 17
+						}
+						continue
+					}
 					switch arg >> 4 {
 					case modLEDFilter, modFineSlideUp, modFineSlideDown, modPatternLoop, modRetrigger,
 						modFineVolumeUp, modFineVolumeDown, modNoteCut, modNoteDelay, modPatternDelay:

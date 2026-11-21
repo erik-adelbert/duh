@@ -26,6 +26,7 @@ const (
 	modFineSlideUp    = 0x1
 	modFineSlideDown  = 0x2
 	modPatternLoop    = 0x6
+	modFinePanning    = 0x8
 	modRetrigger      = 0x9
 	modFineVolumeUp   = 0xA
 	modFineVolumeDown = 0xB
