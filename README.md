@@ -81,6 +81,42 @@ Run `go test ./...` to test the project. The browser builds are separate:
 - `pcmtui`, `wavtui`, and `vgmtui` play audio with terminal interfaces.
 - `ppunpack` and `unmmcmp` decompress PP20 and MMCMP files.
 
+Basic examples using the binaries built by `make build`:
+
+```sh
+# Generate a five-second 440 Hz tone and play the WAV file.
+bin/a440 -dt 5s -o tone.wav
+bin/wavtui -f tone.wav -vu
+
+# Play a tracker module with VU meters and a spectrogram.
+bin/moddec -noloop song.mod | bin/pcmtui -if f32c2r48000 -vu -spectro
+
+# Play a VGM file with the OPL3 register view.
+bin/vgmtui -f song.vgm -opl3
+
+# Wrap raw 48 kHz float32 stereo PCM in a WAV file.
+bin/wavenc -if f32c2r48000 -of f32c2r48000 -o song.wav < song.pcm
+```
+
+Conversion examples:
+
+```sh
+# Resample float32 stereo PCM to 44.1 kHz signed 16-bit stereo.
+bin/pcmconv -if f32c2r48000 -of s16c2r44100 < song.pcm > song-44100.pcm
+
+# Convert a tracker module to a 16-bit WAV file.
+bin/moddec -noloop song.mod | bin/wavenc -if f32c2r48000 -of s16c2r48000 -o song.wav
+
+# Convert raw 48 kHz float32 stereo PCM to MP3.
+bin/mp3enc -if f32c2r48000 -of s16c2r44100 -o song.mp3 < song.pcm
+
+# Resample a 48 kHz, 16-bit stereo WAV to 44.1 kHz.
+bin/wavdec song-48000.wav | bin/wavenc -if s16c2r48000 -of s16c2r44100 -o song-44100.wav
+```
+
+For raw PCM pipelines, `-if` must match the source's sample type, channel
+count, and sample rate. `wavdec` preserves its input WAV's PCM format.
+
 The OPL3 register view in vgmweb and `vgmtui -opl3` shows both operators on
 all 18 channels. It samples register state, so very brief changes can occur
 between display updates; the full view also needs a tall terminal.
